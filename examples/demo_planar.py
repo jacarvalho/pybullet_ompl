@@ -16,7 +16,7 @@ class Maze2D():
         p.setTimeStep(1./240.)
 
         # load robot
-        robot_id = p.loadURDF("models/planar_robot_4_link.xacro", (0,0,0))
+        robot_id = p.loadURDF("../models/planar_robot_4_link.xacro", (0,0,0))
         robot = MyPlanarRobot(robot_id)
         self.robot = robot
 

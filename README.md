@@ -1,6 +1,9 @@
 # pybullet_ompl
 This repo provides interface to use OMPL for motion planning inside PyBullet. It uses OMPL python bindings.
 
+NOTE: this library was adpated from [https://github.com/lyfkyle/pybullet_ompl](https://github.com/lyfkyle/pybullet_ompl)
+
+
 ![example](/images/example.gif)
 
 # Environment
@@ -19,15 +22,15 @@ It is very important that you compile ompl with the correct python version with 
 git clone https://github.com/ompl/ompl.git
 mkdir build/Release
 cd build/Release
-cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y # This is important!!! Make sure you are pointing to the correct python version.
+# cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y # This is important!!! Make sure you are pointing to the correct python version.
+cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=/usr/bin/python${PYTHONV}
 make -j 4 update_bindings # replace "4" with the number of cores on your machine. This step takes some time.
 make -j 4 # replace "4" with the number of cores on your machine
 ```
 
-## Install Pybullet
-Just install pybullet normally.
+## Install this library
 ```
-pip install pybullet
+pip install -e .
 ```
 
 # Demo
