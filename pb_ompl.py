@@ -339,7 +339,7 @@ class PbOMPL():
             return res, sol_path_list, bspline_params
         else:
             return res, sol_path_list
-        
+
     def plan(self, goal, allowed_time=DEFAULT_PLANNING_TIME, **kwargs):
         '''
         plan a path to gaol from current robot state
@@ -365,7 +365,7 @@ class PbOMPL():
             p.stepSimulation()
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, max_tries=1000):
+    def get_state_not_in_collision(self, max_tries=5000):
         """
         Get a state not in collision
         """

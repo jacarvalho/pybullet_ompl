@@ -45,6 +45,8 @@
 <!--    </inertial>-->
   </link>
 
+  <link name="dummy3">
+  </link>
 
   <joint name="p_joint_x" type="prismatic">
     <axis xyz="1 0 0"/>
@@ -59,6 +61,14 @@
     <origin xyz="0 0 0"/>
     <parent link="dummy"/>
     <child link="dummy2"/>
+    <limit effort="1.0" lower="-1.0" upper="1.0" velocity="5.0"/>
+  </joint>
+
+  <joint name="p_joint_z" type="prismatic">
+    <axis xyz="0 0 1"/>
+    <origin xyz="0 0 0"/>
+    <parent link="dummy2"/>
+    <child link="dummy3"/>
     <limit effort="1.0" lower="-1.0" upper="1.0" velocity="5.0"/>
   </joint>
 
@@ -84,10 +94,10 @@
 <!--    </inertial>-->
   </link>
 
-  <joint name="fixed_dummy2_robot" type="fixed">
+  <joint name="fixed_dummy3_robot" type="fixed">
     <axis xyz="0 0 0"/>
     <origin xyz="0 0 0"/>
-    <parent link="dummy2"/>
+    <parent link="dummy3"/>
     <child link="robot"/>
   </joint>
 

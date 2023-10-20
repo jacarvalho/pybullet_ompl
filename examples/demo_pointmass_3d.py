@@ -8,7 +8,7 @@ from pb_ompl import PbOMPLRobot, add_sphere, PbOMPL, add_box
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
 
-class PointMass2DDemo():
+class PointMass3DDemo():
     def __init__(self):
         self.obstacles = []
 
@@ -18,7 +18,7 @@ class PointMass2DDemo():
         p.setTimeStep(1./240.)
 
         # load robot
-        robot_id = p.loadURDF("../models/point_mass_robot_2d.urdf", (0, 0, 0))
+        robot_id = p.loadURDF("../models/point_mass_robot_3d.urdf", (0, 0, 0))
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 
@@ -109,5 +109,5 @@ class PointMass2DDemo():
 
 
 if __name__ == '__main__':
-    maze = PointMass2DDemo()
+    maze = PointMass3DDemo()
     maze.demo()
