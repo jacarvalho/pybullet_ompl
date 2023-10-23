@@ -149,7 +149,8 @@ class PbOMPL():
         self.joint_bounds_high = self.joint_bounds_np[:, 1]
 
         self.ss = og.SimpleSetup(self.space)
-        self.ss.setStateValidityChecker(ob.StateValidityCheckerFn(partial(self.is_state_valid, max_distance=min_distance_robot_env)))
+        self.min_distance_robot_env = min_distance_robot_env
+        self.ss.setStateValidityChecker(ob.StateValidityCheckerFn(partial(self.is_state_valid)))
         self.si = self.ss.getSpaceInformation()
         # self.si.setStateValidityCheckingResolution(0.005)
         # self.collision_fn = pb_utils.get_collision_fn(self.robot_id, self.robot.joint_idx, self.obstacles, [], True, set(),
@@ -170,7 +171,7 @@ class PbOMPL():
     def remove_obstacles(self, obstacle_id):
         self.obstacles.remove(obstacle_id)
 
-    def is_state_valid(self, state, max_distance=0.):
+    def is_state_valid(self, state, max_distance=self.min_distance_robot_env):
         # satisfy bounds TODO
         # Should be unecessary if joint bounds is properly set
 
@@ -319,7 +320,7 @@ class PbOMPL():
             print(f'Checking if all states are valid...')
             all_states_valid = True
             for sol_path in sol_path_list:
-                if not self.is_state_valid(sol_path, max_distance=0.):  # set the collision margin of interpolated points to 0
+                if not self.is_state_valid(sol_path):  # set the collision margin of interpolated points to 0
                     all_states_valid = False
                     break
             if all_states_valid:

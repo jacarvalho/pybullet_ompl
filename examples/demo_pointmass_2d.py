@@ -95,7 +95,7 @@ class PointMass2DDemo():
         self.robot.set_state(start)
         res, path, bspline_params = self.pb_ompl_interface.plan(
             goal,
-            allowed_time=3.0,
+            allowed_time=4.0,
             interpolate_num=250,
             smooth_with_bspline=True, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.05,
             create_bspline=True, bspline_num_knots=20, bspline_degree=5,
