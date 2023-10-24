@@ -3,7 +3,7 @@ import sys
 
 import pybullet as p
 
-from pb_ompl import PbOMPLRobot, add_sphere, PbOMPL, add_box
+from pb_ompl.pb_ompl import PbOMPLRobot, PbOMPL, add_sphere, add_box
 
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
@@ -18,7 +18,10 @@ class PointMass3DDemo():
         p.setTimeStep(1./240.)
 
         # load robot
-        robot_id = p.loadURDF("../models/point_mass_robot_3d.urdf", (0, 0, 0))
+        robot_id = p.loadURDF(
+            osp.join(osp.dirname(osp.abspath(__file__)), "../pb_ompl/models/point_mass_robot_3d.urdf"),
+            (0,0,0)
+        )
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 
@@ -95,7 +98,7 @@ class PointMass3DDemo():
         self.robot.set_state(start)
         res, path, bspline_params = self.pb_ompl_interface.plan(
             goal,
-            allowed_time=3.0,
+            allowed_time=4.0,
             interpolate_num=250,
             smooth_with_bspline=True, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.05,
             create_bspline=True, bspline_num_knots=20, bspline_degree=5,

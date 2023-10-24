@@ -41,27 +41,6 @@ class PointMass2DDemo():
         for obstacle in self.obstacles:
             p.removeBody(obstacle)
 
-    # def add_obstacles(self):
-    #     # add spheres
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.43378472328186035, 0.3334643840789795, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.3313474655151367, 0.6288051009178162, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.5656964778900146, -0.484994500875473, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.42124247550964355, -0.6656165719032288, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.05636655166745186, -0.5149664282798767, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.36961784958839417, -0.12315540760755539, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.8740217089653015, -0.4034936726093292, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.6359214186668396, 0.6683124899864197, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.808782160282135, 0.5287870168685913, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.023786112666130066, 0.4590069353580475, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.1455741971731186, 0.16420497000217438, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.628413736820221, -0.43461447954177856, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.17965620756149292, -0.8926276564598083, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([0.6775968670845032, 0.8817358016967773, 0], 0.125))
-    #     self.obstacles.append(pb_ompl.add_sphere([-0.3608766794204712, 0.8313458561897278, 0], 0.125))
-    #
-    #     # store obstacles
-    #     self.pb_ompl_interface.set_obstacles(self.obstacles)
-
     def add_obstacles(self):
         # add spheres
         self.obstacles.append(add_sphere([0.3313474655151367, 0.6288051009178162, 0], 0.125))
@@ -99,7 +78,7 @@ class PointMass2DDemo():
         res, path, bspline_params = self.pb_ompl_interface.plan(
             goal,
             allowed_time=4.0,
-            interpolate_num=250,
+            interpolate_num=500,
             smooth_with_bspline=True, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.05,
             create_bspline=True, bspline_num_knots=20, bspline_degree=5,
             debug=True,

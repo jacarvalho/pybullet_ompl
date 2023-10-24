@@ -168,7 +168,10 @@ class PbOMPL():
     def remove_obstacles(self, obstacle_id):
         self.obstacles.remove(obstacle_id)
 
-    def is_state_valid(self, state, max_distance=self.min_distance_robot_env):
+    def is_state_valid(self, state, max_distance=None):
+        if max_distance is None:
+            max_distance = self.min_distance_robot_env
+
         # satisfy bounds TODO
         # Should be unecessary if joint bounds is properly set
 
