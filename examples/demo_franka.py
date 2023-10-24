@@ -22,7 +22,9 @@ class FrankaDemo():
         p.loadURDF("plane.urdf")
 
         # load robot
-        robot_id = p.loadURDF("../pb_ompl/models/franka_description/robots/panda_arm.urdf", (0,0,0), useFixedBase = 1)
+        robot_id = p.loadURDF(
+            osp.join(osp.dirname(osp.abspath(__file__)), "../pb_ompl/models/franka_description/robots/panda_arm.urdf"),
+            (0,0,0), useFixedBase = 1)
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 

@@ -18,7 +18,10 @@ class PointMass2DDemo():
         p.setTimeStep(1./240.)
 
         # load robot
-        robot_id = p.loadURDF("../pb_ompl/models/point_mass_robot_2d.urdf", (0, 0, 0))
+        robot_id = p.loadURDF(
+            osp.join(osp.dirname(osp.abspath(__file__)), "../pb_ompl/models/point_mass_robot_2d.urdf"),
+            (0,0,0)
+        )
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 

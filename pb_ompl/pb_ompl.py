@@ -7,13 +7,15 @@ from scipy import interpolate
 # subdirectory of the parent directory called "py-bindings."
 from os.path import abspath, dirname, join
 import sys
+
+from pb_ompl import utils
+
 sys.path.insert(0, join(dirname(dirname(abspath(__file__))), 'ompl/py-bindings'))
 print(*sys.path, sep='\n')
 
 from ompl import base as ob
 from ompl import geometric as og
 import pybullet as p
-import utils
 import time
 from itertools import product
 import copy

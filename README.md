@@ -20,7 +20,7 @@ Create a conda environment and install
 ```bash
 conda create -n ompl_env python=3.8
 conda activate ompl_env
-conda install castxml
+pip install castxml
 pip install -vU pygccxml pyplusplus
 ```
 
