@@ -1,4 +1,3 @@
-pybullet
 numpy
-scipy
 matplotlib
+pybullet

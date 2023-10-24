@@ -9,23 +9,33 @@ NOTE: this library was adpated from [https://github.com/lyfkyle/pybullet_ompl](h
 # Environment
 Tested with:<br>
 **Python 3.8**<br>
-**Ubuntu18.04**
+**Ubuntu 20.04**
 
 # Installation instructions:
 
 ## Install dependencies of OMPL
 https://github.com/ompl/ompl/blob/main/doc/markdown/installPyPlusPlus.md
 
+Create a conda environment and install
+```bash
+conda create -n ompl_env python=3.8
+conda activate ompl_env
+pip install castxml
+pip install -vU pygccxml pyplusplus
+```
+
 ## Install OMPL from source
 It is very important that you compile ompl with the correct python version with the CMake flag.
-```
+```bash
 git clone https://github.com/ompl/ompl.git
-mkdir build/Release
+cd ompl
+mkdir -p build/Release
 cd build/Release
-# cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y # This is important!!! Make sure you are pointing to the correct python version.
-cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=/usr/bin/python${PYTHONV}
-make -j 4 update_bindings # replace "4" with the number of cores on your machine. This step takes some time.
-make -j 4 # replace "4" with the number of cores on your machine
+# cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y  # This is important!!! Make sure you are pointing to the correct python version.
+#cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=/usr/bin/python
+cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=$HOME/miniconda3/envs/ompl_env/bin/python
+make -j 32 update_bindings  # This step takes a lot of time.
+make -j 32
 ```
 
 ## Install this library
@@ -34,10 +44,14 @@ pip install -e .
 ```
 
 # Demo
-Two examples are provided.
 This demo plans the arm motion of a Franka robot.
 ```
 python examples/demo_franka.py
+```
+
+This demo plans the motion of a 2D point mass.
+```
+python examples/demo_pointmass_2d.py
 ```
 
 This demo plans whole-body motion of a planar 4-link snake-like robot.
