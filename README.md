@@ -33,7 +33,7 @@ mkdir -p build/Release
 cd build/Release
 # cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y  # This is important!!! Make sure you are pointing to the correct python version.
 #cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=/usr/bin/python
-cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=$HOME/miniconda3/envs/ompl_env/bin/python
+cmake -DCMAKE_DISABLE_FIND_PACKAGE_pypy=ON ../.. -DPYTHON_EXEC=${HOME}/miniconda3/envs/${CONDA_DEFAULT_ENV}/bin/python
 make -j 32 update_bindings  # This step takes a lot of time.
 make -j 32
 ```
