@@ -3,21 +3,15 @@ from functools import partial
 import numpy as np
 from scipy import interpolate
 
-try:
-    from ompl import util as ou
-    from ompl import base as ob
-    from ompl import geometric as og
-except ImportError:
-    # if the ompl module is not in the PYTHONPATH assume it is installed in a
-    # subdirectory of the parent directory called "py-bindings."
-    from os.path import abspath, dirname, join
-    import sys
-    sys.path.insert(0, join(dirname(dirname(abspath(__file__))), 'ompl/py-bindings'))
-    # sys.path.insert(0, join(dirname(abspath(__file__)), '../whole-body-motion-planning/src/ompl/py-bindings'))
-    print(sys.path)
-    from ompl import util as ou
-    from ompl import base as ob
-    from ompl import geometric as og
+# if the ompl module is not in the PYTHONPATH assume it is installed in a
+# subdirectory of the parent directory called "py-bindings."
+from os.path import abspath, dirname, join
+import sys
+sys.path.insert(0, join(dirname(dirname(abspath(__file__))), 'ompl/py-bindings'))
+print(*sys.path, sep='\n')
+
+from ompl import base as ob
+from ompl import geometric as og
 import pybullet as p
 import utils
 import time
@@ -26,6 +20,7 @@ import copy
 
 INTERPOLATE_NUM = 500
 DEFAULT_PLANNING_TIME = 5.0
+
 
 
 class PbOMPLRobot:

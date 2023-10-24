@@ -3,7 +3,7 @@ import sys
 
 import pybullet as p
 
-from pb_ompl import PbOMPLRobot, add_sphere, PbOMPL, add_box
+from pb_ompl.pb_ompl import PbOMPL, PbOMPLRobot, add_sphere, add_box
 
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
@@ -18,7 +18,7 @@ class PointMass2DDemo():
         p.setTimeStep(1./240.)
 
         # load robot
-        robot_id = p.loadURDF("../models/point_mass_robot_2d.urdf", (0, 0, 0))
+        robot_id = p.loadURDF("../pb_ompl/models/point_mass_robot_2d.urdf", (0, 0, 0))
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 

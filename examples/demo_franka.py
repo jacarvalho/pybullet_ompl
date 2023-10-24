@@ -4,7 +4,7 @@ import sys
 import pybullet as p
 import pybullet_data
 
-from pb_ompl import add_box, PbOMPL, PbOMPLRobot, add_sphere
+from pb_ompl.pb_ompl import PbOMPL, PbOMPLRobot, add_sphere, add_box
 
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
@@ -22,7 +22,7 @@ class FrankaDemo():
         p.loadURDF("plane.urdf")
 
         # load robot
-        robot_id = p.loadURDF("../models/franka_description/robots/panda_arm.urdf", (0,0,0), useFixedBase = 1)
+        robot_id = p.loadURDF("../pb_ompl/models/franka_description/robots/panda_arm.urdf", (0,0,0), useFixedBase = 1)
         robot = PbOMPLRobot(robot_id)
         self.robot = robot
 

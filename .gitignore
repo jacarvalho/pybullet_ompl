@@ -1,3 +1,5 @@
 # python
 *.pyc
 .idea
+ompl
+*egg-info
