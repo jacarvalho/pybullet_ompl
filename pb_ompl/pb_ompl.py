@@ -239,6 +239,9 @@ class PbOMPL():
         '''
         plan a path to gaol from the given robot start state
         '''
+        # clear the planning data
+        self.ss.clear()
+
         print("\n#################################################################################")
         print("START planning")
         print(self.planner.params())
@@ -284,46 +287,56 @@ class PbOMPL():
 
             ############################################################
             # create bspline and check if all states are valid
-            if create_bspline:
-                path_np = np.array(sol_path_list)
+            try:
+                if create_bspline:
+                    path_np = np.array(sol_path_list)
 
-                u_tmp = np.linspace(0, 1, bspline_num_knots-2)
-                u_tmp = np.insert(u_tmp, 0, 0)  # fixed initial position
-                u_tmp = np.insert(u_tmp, -1, 0)  # fixed final position
+                    u_tmp = np.linspace(0, 1, bspline_num_knots-2)
+                    u_tmp = np.insert(u_tmp, 0, 0)  # fixed initial position
+                    u_tmp = np.insert(u_tmp, -1, 0)  # fixed final position
 
-                tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=u_tmp, task=-1)
-                tt, cc, k = tck
-                cc = np.array(cc)
+                    tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=u_tmp, task=-1)
+                    tt, cc, k = tck
+                    cc = np.array(cc)
 
-                bspline_params = tck
+                    bspline_params = tck
 
-                print(f'u shape: {u.shape}')
-                print(f'knots shape: {tt.shape}')
-                print(f'coefficients shape: {cc.shape}')
+                    print(f'u shape: {u.shape}')
+                    print(f'knots shape: {tt.shape}')
+                    print(f'coefficients shape: {cc.shape}')
 
-                bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
-                u_interpolation = np.linspace(0, 1, interpolate_num)
-                bspline_path_interpolated = bspl(u_interpolation)
-                sol_path_list = bspline_path_interpolated.tolist()
+                    bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
+                    u_interpolation = np.linspace(0, 1, interpolate_num)
+                    bspline_path_interpolated = bspl(u_interpolation)
+                    sol_path_list = bspline_path_interpolated.tolist()
 
-                if debug:
-                    import matplotlib.pyplot as plt
-                    plt.figure()
+                    if debug:
+                        import matplotlib.pyplot as plt
+                        plt.figure()
 
-                    for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
-                        plt.plot(u_interpolation, joint, linestyle='dashed')
-                        plt.plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
+                        for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
+                            plt.plot(u_interpolation, joint, linestyle='dashed')
+                            plt.plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
 
-                    plt.legend(loc='best')
-                    plt.show()
+                        plt.legend(loc='best')
+                        plt.show()
+            except Exception as e:
+                print(f'Exception: {e}')
+                sol_path_list = []
+                bspline_params = None
 
             ############################################################
             print(f'Checking if all states are valid...')
             all_states_valid = True
-            for sol_path in sol_path_list:
-                if not self.is_state_valid(sol_path, max_distance=0.):  # set the collision margin of interpolated points to 0
-                    all_states_valid = False
-                    break
+            if len(sol_path_list) == 0:
+                all_states_valid = False
+            else:
+                for sol_path in sol_path_list:
+                    # set the collision margin of interpolated points to 0
+                    if not self.is_state_valid(sol_path, max_distance=0.):
+                        all_states_valid = False
+                        break
+
             if all_states_valid:
                 print(f'...all states are valid\n')
                 res = True
@@ -335,8 +348,6 @@ class PbOMPL():
         else:
             print("No EXACT solution found\n")
 
-        # reset robot state
-        self.robot.set_state(orig_robot_state)
         if create_bspline:
             return res, sol_path_list, bspline_params
         else:
@@ -358,6 +369,8 @@ class PbOMPL():
                       meaning that the simulator will simply reset robot's state WITHOUT any dynamics simulation. Since the
                       path is collision free, this is somewhat acceptable.
         '''
+        orig_robot_state = path[0]
+        self.robot.set_state(orig_robot_state)
         for q in path:
             if dynamics:
                 for i in range(self.robot.num_dim):
@@ -395,13 +408,17 @@ class PbOMPL():
 
 ###############################################################################################################
 # HELPER FUNCTIONS
-def add_box(box_pos, half_box_size):
+def add_box(box_pos, half_box_size, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
     colBoxId = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_box_size)
-    box_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=box_pos)
+    box_id = p.createMultiBody(
+        baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=box_pos, baseOrientation=orientation
+    )
     return box_id
 
 
-def add_sphere(sphere_pos, sphere_radius):
+def add_sphere(sphere_pos, sphere_radius, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
     colBoxId = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius)
-    sphere_id = p.createMultiBody(baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=sphere_pos)
+    sphere_id = p.createMultiBody(
+        baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=sphere_pos, baseOrientation=orientation
+    )
     return sphere_id
