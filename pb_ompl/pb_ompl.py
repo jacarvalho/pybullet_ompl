@@ -208,7 +208,7 @@ class PbOMPL():
         '''
         if planner_name == "PRM":
             self.planner = og.PRM(self.ss.getSpaceInformation())
-        if planner_name == "PRMstar":
+        elif planner_name == "PRMstar":
             self.planner = og.PRM(self.ss.getSpaceInformation())
         elif planner_name == "RRT":
             self.planner = og.RRT(self.ss.getSpaceInformation())

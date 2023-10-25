@@ -30,7 +30,8 @@ class FrankaDemo():
 
         # setup pb_ompl
         self.pb_ompl_interface = PbOMPL(self.robot, self.obstacles, min_distance_robot_env=0.01)
-        self.pb_ompl_interface.set_planner("BITstar")
+        # self.pb_ompl_interface.set_planner("BITstar")
+        self.pb_ompl_interface.set_planner("PRM")
         # self.pb_ompl_interface.set_planner("PRMstar")
         # self.pb_ompl_interface.set_planner("ABITstar")
         # self.pb_ompl_interface.set_planner("AITstar")
