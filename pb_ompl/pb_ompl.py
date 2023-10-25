@@ -168,9 +168,13 @@ class PbOMPL():
     def remove_obstacles(self, obstacle_id):
         self.obstacles.remove(obstacle_id)
 
-    def is_state_valid(self, state, max_distance=None):
+    def is_state_valid(self, state, max_distance=None, check_bounds=False):
         # satisfy bounds TODO
         # Should be unecessary if joint bounds is properly set
+        # Check for joint bounds due to the bspline interpolation
+        if check_bounds:
+            if np.any(np.logical_or(state < self.joint_bounds_np[:, 0], state > self.joint_bounds_np[:, 1])):
+                return False
 
         # check self-collision
         self.robot.set_state(self.state_to_list(state))
@@ -232,7 +236,7 @@ class PbOMPL():
                         smooth_with_bspline=False, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.01,
                         interpolate_num=INTERPOLATE_NUM,
                         create_bspline=False,
-                        bspline_num_knots=32,
+                        bspline_num_control_points=32,
                         bspline_degree=3,
                         debug=False,
                         **kwargs):
@@ -274,6 +278,8 @@ class PbOMPL():
 
             if smooth_with_bspline:
                 ps = og.PathSimplifier(self.si)
+                print(f"shortcut path: {ps.shortcutPath(sol_path_geometric)}")
+                print(f"simplifymax path: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
             sol_path_states = sol_path_geometric.getStates()
@@ -291,11 +297,15 @@ class PbOMPL():
                 if create_bspline:
                     path_np = np.array(sol_path_list)
 
-                    u_tmp = np.linspace(0, 1, bspline_num_knots-2)
-                    u_tmp = np.insert(u_tmp, 0, 0)  # fixed initial position
-                    u_tmp = np.insert(u_tmp, -1, 0)  # fixed final position
+                    # https://arxiv.org/pdf/2301.04330.pdf
+                    # these knots ensure the first and last control points are the start and goal states
+                    d = bspline_degree
+                    c = bspline_num_control_points
+                    knots = np.zeros(d+1)
+                    knots = np.append(knots, np.linspace(1/(c-d), (c-d-1)/(c-d), c-d-1))
+                    knots = np.append(knots, np.ones(d+1))
 
-                    tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=u_tmp, task=-1)
+                    tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=knots, task=-1)
                     tt, cc, k = tck
                     cc = np.array(cc)
 
@@ -313,13 +323,18 @@ class PbOMPL():
                     if debug:
                         import matplotlib.pyplot as plt
                         plt.figure()
-
                         for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
                             plt.plot(u_interpolation, joint, linestyle='dashed')
                             plt.plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
-
                         plt.legend(loc='best')
                         plt.show()
+
+                        if cc.shape[0] == 2:
+                            plt.figure()
+                            plt.plot(cc.T[:, 0], cc.T[:, 1], marker='o', label='Control Points')
+                            plt.plot(bspline_path_interpolated[:, 0], bspline_path_interpolated[:, 1], c='b', lw=3, alpha=0.7)
+                            plt.show()
+
             except Exception as e:
                 print(f'Exception: {e}')
                 sol_path_list = []
@@ -333,7 +348,7 @@ class PbOMPL():
             else:
                 for sol_path in sol_path_list:
                     # set the collision margin of interpolated points to 0
-                    if not self.is_state_valid(sol_path, max_distance=0.):
+                    if not self.is_state_valid(sol_path, max_distance=0., check_bounds=True):
                         all_states_valid = False
                         break
 
