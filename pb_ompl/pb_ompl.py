@@ -11,7 +11,7 @@ import sys
 from pb_ompl import utils
 
 sys.path.insert(0, join(dirname(dirname(abspath(__file__))), 'ompl/py-bindings'))
-print(*sys.path, sep='\n')
+# print(*sys.path, sep='\n')
 
 from ompl import base as ob
 from ompl import geometric as og
