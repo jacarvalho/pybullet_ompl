@@ -169,7 +169,7 @@ class PbOMPL():
         self.obstacles.remove(obstacle_id)
 
     def is_state_valid(self, state, max_distance=None, check_bounds=False):
-        # satisfy bounds TODO
+        # Satisfy bounds
         # Should be unecessary if joint bounds is properly set
         # Check for joint bounds due to the bspline interpolation
         if check_bounds:

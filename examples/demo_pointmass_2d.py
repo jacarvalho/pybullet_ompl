@@ -31,8 +31,8 @@ class PointMass2DDemo():
         # self.pb_ompl_interface.set_planner("ABITstar")
         # self.pb_ompl_interface.set_planner("AITstar")
         # self.pb_ompl_interface.set_planner("PRMstar")
-        # self.pb_ompl_interface.set_planner("RRTConnect")
-        self.pb_ompl_interface.set_planner("RRTstar")
+        self.pb_ompl_interface.set_planner("RRTConnect")
+        # self.pb_ompl_interface.set_planner("RRTstar")
 
         # add obstacles
         self.add_obstacles()
