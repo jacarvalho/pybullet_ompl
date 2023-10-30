@@ -120,6 +120,7 @@ class PbStateSpace(ob.RealVectorStateSpace):
 class PbOMPL():
     def __init__(self, robot, obstacles = [],
                  min_distance_robot_env=0.0,
+                 min_distance_robot_env_waypoint_checking=0.01,
                  ) -> None:
         '''
         Args
@@ -147,6 +148,7 @@ class PbOMPL():
 
         self.ss = og.SimpleSetup(self.space)
         self.min_distance_robot_env = min_distance_robot_env
+        self.min_distance_robot_env_waypoint_checking = min(min_distance_robot_env, min_distance_robot_env_waypoint_checking)
         self.ss.setStateValidityChecker(ob.StateValidityCheckerFn(self.is_state_valid))
         self.si = self.ss.getSpaceInformation()
         # self.si.setStateValidityCheckingResolution(0.005)
@@ -348,7 +350,10 @@ class PbOMPL():
             else:
                 for sol_path in sol_path_list:
                     # Check if all states in the path are not in collision
-                    if not self.is_state_valid(sol_path, max_distance=0.01, check_bounds=True):
+                    if not self.is_state_valid(
+                            sol_path,
+                            max_distance=self.min_distance_robot_env_waypoint_checking,
+                            check_bounds=True):
                         all_states_valid = False
                         break
 
