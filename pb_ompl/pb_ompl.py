@@ -347,8 +347,8 @@ class PbOMPL():
                 all_states_valid = False
             else:
                 for sol_path in sol_path_list:
-                    # set the collision margin of interpolated points to 0
-                    if not self.is_state_valid(sol_path, max_distance=0., check_bounds=True):
+                    # Check if all states in the path are not in collision
+                    if not self.is_state_valid(sol_path, max_distance=0.01, check_bounds=True):
                         all_states_valid = False
                         break
 
