@@ -1,7 +1,6 @@
 import os.path as osp
 import sys
 
-import numpy as np
 import pybullet as p
 import pybullet_data
 
@@ -10,7 +9,7 @@ from pb_ompl.pb_ompl import PbOMPL, PbOMPLRobot, add_sphere, add_box
 sys.path.insert(0, osp.join(osp.dirname(osp.abspath(__file__)), '../'))
 
 
-class FrankaDemo():
+class PlanarRobot2Link():
     def __init__(self):
         self.obstacles = []
 
@@ -23,17 +22,17 @@ class FrankaDemo():
         p.loadURDF("plane.urdf")
 
         # load robot
-        urdf_path = osp.join(osp.dirname(osp.abspath(__file__)),
-                             "../pb_ompl/models/franka_description/robots/panda_arm_hand.urdf")
-        robot_id = p.loadURDF(urdf_path,(0, 0, 0), useFixedBase=1)
-        robot = PbOMPLRobot(robot_id, urdf_path=urdf_path, link_name_ee="panda_hand")
+        robot_id = p.loadURDF(
+            osp.join(osp.dirname(osp.abspath(__file__)), "../pb_ompl/models/planar_robot_2_link.urdf"),
+            (0,0,0), useFixedBase = 1)
+        robot = PbOMPLRobot(robot_id)
         self.robot = robot
 
         # setup pb_ompl
-        self.pb_ompl_interface = PbOMPL(self.robot, self.obstacles, min_distance_robot_env=0.01)
+        self.pb_ompl_interface = PbOMPL(self.robot, self.obstacles, min_distance_robot_env=0.02)
         # self.pb_ompl_interface.set_planner("BITstar")
-        self.pb_ompl_interface.set_planner("PRM")
-        # self.pb_ompl_interface.set_planner("PRMstar")
+        # self.pb_ompl_interface.set_planner("PRM")
+        self.pb_ompl_interface.set_planner("PRMstar")
         # self.pb_ompl_interface.set_planner("ABITstar")
         # self.pb_ompl_interface.set_planner("AITstar")
         # self.pb_ompl_interface.set_planner("RRTConnect")
@@ -47,29 +46,25 @@ class FrankaDemo():
             p.removeBody(obstacle)
 
     def add_obstacles(self):
-        # add boxes
-        self.obstacles.append(add_box([1, 0, 0.7], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([1, 0, 0.1], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([-1, 0, 0.7], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([-1, 0, 0.1], [0.5, 0.5, 0.05]))
-
         # add spheres
-        self.obstacles.append(add_sphere([-1, 0, 0.1], 0.5))
-        self.obstacles.append(add_sphere([1, 0, 1], 0.2))
+        self.obstacles.append(add_sphere([0.3, 0.3, 0.], 0.1))
+        self.obstacles.append(add_sphere([0.3, -0.3, 0.], 0.1))
+        self.obstacles.append(add_sphere([-0.3, 0.25, 0.], 0.1))
+        self.obstacles.append(add_sphere([-0.3, -0.25, 0.], 0.1))
 
         # store obstacles
         self.pb_ompl_interface.set_obstacles(self.obstacles)
 
-    def demo(self, duration=5.0, ee_pose_target=None):
+    def demo(self, duration=5.0):
         start = self.pb_ompl_interface.get_state_not_in_collision()
-        goal = self.pb_ompl_interface.get_state_not_in_collision(ee_pose_target=ee_pose_target)
+        goal = self.pb_ompl_interface.get_state_not_in_collision()
         print(f'start: {start}')
         print(f'goal: {goal}')
 
         self.robot.set_state(start)
         res, path, bspline_params = self.pb_ompl_interface.plan(
             goal,
-            allowed_time=3.0,
+            allowed_time=10.0,
             interpolate_num=250,
             smooth_with_bspline=True, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.05,
             create_bspline=True, bspline_num_knots=20, bspline_degree=5,
@@ -77,14 +72,16 @@ class FrankaDemo():
         )
 
         if res:
-            self.pb_ompl_interface.execute(path, sleep_time=duration/len(path))
+            # path = [[0., 0.] * len(path)]
+            self.pb_ompl_interface.execute(
+                path,
+                sleep_time=duration/len(path),
+                # sleep_time=100000
+            )
 
         return res, path, bspline_params
 
 
 if __name__ == '__main__':
-    env = FrankaDemo()
-    W_H_EE = np.eye(4)
-    W_H_EE[:3, 3] = [0.6, 0.5, 0.4]
-    for _ in range(10):
-        env.demo(ee_pose_target=W_H_EE)
+    env = PlanarRobot2Link()
+    env.demo()

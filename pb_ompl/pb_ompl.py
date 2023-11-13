@@ -1,6 +1,9 @@
+import math
 from functools import partial
 
 import numpy as np
+np.set_printoptions(precision=3, suppress=True)
+import pinocchio
 from scipy import interpolate
 
 # if the ompl module is not in the PYTHONPATH assume it is installed in a
@@ -24,7 +27,6 @@ INTERPOLATE_NUM = 500
 DEFAULT_PLANNING_TIME = 5.0
 
 
-
 class PbOMPLRobot:
     '''
     To use with Pb_OMPL. You need to construct a instance of this class and pass to PbOMPL.
@@ -33,9 +35,12 @@ class PbOMPLRobot:
     This parent class by default assumes that all joints are acutated and should be planned. If this is not your desired
     behaviour, please write your own inheritated class that overrides respective functionalities.
     '''
-    def __init__(self, id) -> None:
+    def __init__(self, id, urdf_path=None, link_name_ee=None) -> None:
         # Public attributes
         self.id = id
+
+        assert link_name_ee is not None, "Please specify end-effector link name"
+        self.link_name_ee = link_name_ee
 
         # prune fixed joints
         all_joint_num = p.getNumJoints(id)
@@ -46,6 +51,32 @@ class PbOMPLRobot:
         print(self.joint_idx)
         self.joint_bounds = []
 
+        # for sampling inside joint bounds
+        self.joint_bounds_np = np.array(self.get_joint_bounds())
+        self.joint_bounds_low_np = self.joint_bounds_np[:, 0]
+        self.joint_bounds_low_l = self.joint_bounds_low_np.tolist()
+        self.joint_bounds_high_np = self.joint_bounds_np[:, 1]
+        self.joint_bounds_high_l = self.joint_bounds_high_np.tolist()
+        self.joint_ranges_np = self.joint_bounds_high_np - self.joint_bounds_low_np
+        self.joint_ranges_l = self.joint_ranges_np.tolist()
+
+        # get link name to index
+        self._link_name_to_index = {p.getBodyInfo(id)[0].decode('UTF-8'): -1, }
+        for _id in range(p.getNumJoints(id)):
+            _name = p.getJointInfo(id, _id)[12].decode('UTF-8')
+            self._link_name_to_index[_name] = _id
+
+        self.link_ee_idx = self._link_name_to_index[self.link_name_ee]
+
+        # pinocchio
+        self.pinocchio_robot_model = None
+        if urdf_path is not None:
+            self.pinocchio_robot_model = pinocchio.buildModelFromUrdf(urdf_path)
+            self.pinocchio_robot_model_data = self.pinocchio_robot_model.createData()
+            self.pinocchio_ee_frameid = self.pinocchio_robot_model.getFrameId(self.link_name_ee)
+            self.pinocchio_ee_parent_joint_id = self.pinocchio_robot_model.frames[self.pinocchio_ee_frameid].parent
+
+        ############################################################
         self.reset()
 
     def _is_not_fixed(self, joint_idx):
@@ -57,13 +88,15 @@ class PbOMPLRobot:
         Get joint bounds.
         By default, read from pybullet
         '''
+        joint_bounds = []
         for i, joint_id in enumerate(self.joint_idx):
             joint_info = p.getJointInfo(self.id, joint_id)
-            low = joint_info[8] # low bounds
-            high = joint_info[9] # high bounds
+            low = joint_info[8]  # lower bounds
+            high = joint_info[9]  # higher bounds
             if low < high:
-                self.joint_bounds.append([low, high])
-        print("Joint bounds: {}".format(self.joint_bounds))
+                joint_bounds.append([low, high])
+        print("Joint bounds: {}".format(joint_bounds))
+        self.joint_bounds = joint_bounds
         return self.joint_bounds
 
     def get_cur_state(self):
@@ -92,6 +125,98 @@ class PbOMPLRobot:
     def _set_joint_positions(self, joints, positions):
         for joint, value in zip(joints, positions):
             p.resetJointState(self.id, joint, value, targetVelocity=0)
+
+    def get_random_joint_position(self):
+        rv = np.random.random(self.num_dim)
+        state = self.joint_bounds_low_np + rv * (self.joint_bounds_high_np - self.joint_bounds_low_np)
+        return state
+
+    def get_ee_pose(self, state, quat_wxyz=False, **kwargs):
+        """
+        Get end-effector pose
+        """
+        self.set_state(self.state_to_list(state))
+        position, orientation = p.getLinkState(
+            self.id, self.link_ee_idx,
+            # computeLinkVelocity=0, computeForwardKinematics=1
+        )[:2]
+        if quat_wxyz:  # orientation in pybullet is xyzw
+            orientation = [orientation[3], orientation[0], orientation[1], orientation[2]]
+        return [np.array(position), np.array(orientation)]
+
+    def state_to_list(self, state):
+        return [state[i] for i in range(self.num_dim)]
+
+    def run_ik(self, ee_pose_target_in_world, ik_initial_pose=None, debug=False, **kwargs):
+        assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
+
+        print(f'Running Inverse Kinematics for {self.link_name_ee}...')
+        # ee_position_target = ee_pose_target[:3, 3]
+        # ee_orientation_target = ee_pose_target[:3, :3]
+
+        ee_pose_target_in_world = pinocchio.SE3(ee_pose_target_in_world)
+
+        if ik_initial_pose is None:
+            q = self.get_random_joint_position()
+        else:
+            q = ik_initial_pose + np.random.normal(0, 0.5, size=ik_initial_pose.shape)
+            q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
+
+        eps = 1e-2
+        IT_MAX = 1000
+        DT = 1e-2
+        damp = 1e-12
+
+        i = 0
+        while True:
+            pinocchio.forwardKinematics(self.pinocchio_robot_model, self.pinocchio_robot_model_data, q)
+            pinocchio.updateFramePlacements(self.pinocchio_robot_model, self.pinocchio_robot_model_data)
+            pinocchio.framesForwardKinematics(self.pinocchio_robot_model, self.pinocchio_robot_model_data, q)
+
+            # Transform the EE target pose from the world frame to the (local/parent) joint frame
+            joint_pose_in_world = self.pinocchio_robot_model_data.oMi[self.pinocchio_ee_parent_joint_id]
+            ee_pose_in_world = self.pinocchio_robot_model_data.oMf[self.pinocchio_ee_frameid]
+
+            ee_pose_target_in_joint = ee_pose_target_in_world.act(ee_pose_in_world.actInv(joint_pose_in_world))
+
+            dMi = ee_pose_target_in_joint.actInv(joint_pose_in_world)
+
+            err = pinocchio.log(dMi).vector
+            err_position = err[:3]
+            err_orientation = err[3:]
+            # print(np.linalg.norm(err_position), np.linalg.norm(err_orientation))
+            if np.linalg.norm(err_position) < eps and np.linalg.norm(err_orientation) < eps:
+                success = True
+                break
+            if i >= IT_MAX:
+                success = False
+                break
+            pinocchio.computeJointJacobians(self.pinocchio_robot_model, self.pinocchio_robot_model_data, q)
+            J = pinocchio.computeJointJacobian(
+                self.pinocchio_robot_model, self.pinocchio_robot_model_data, q,
+                self.pinocchio_ee_parent_joint_id
+            )
+            v = - J.T.dot(np.linalg.solve(J.dot(J.T) + damp * np.eye(6), err))
+            q = pinocchio.integrate(self.pinocchio_robot_model, q, v * DT)
+            if not i % 10 and debug:
+                print('%d: error = %s' % (i, err.T))
+            i += 1
+
+        print('------------------')
+        print('IK RESULTS\n')
+        if success:
+            print("IK convergence achieved!")
+        else:
+            print("\nWarning: the iterative algorithm has not reached convergence to the desired precision")
+
+        print(f'\nIK joint position: {q.flatten()}')
+        print(f'\nIK error: {err.T}')
+        print(f'...Done Inverse Kinematics for {self.link_name_ee}\n')
+
+        if success:
+            return q.flatten().tolist()
+        else:
+            return None
 
 class PbStateSpace(ob.RealVectorStateSpace):
     def __init__(self, num_dim) -> None:
@@ -141,11 +266,6 @@ class PbOMPL():
             bounds.setHigh(i, bound[1])
         self.space.setBounds(bounds)
 
-        # for sampling inside joint bounds
-        self.joint_bounds_np = np.array(joint_bounds)
-        self.joint_bounds_low = self.joint_bounds_np[:, 0]
-        self.joint_bounds_high = self.joint_bounds_np[:, 1]
-
         self.ss = og.SimpleSetup(self.space)
         self.min_distance_robot_env = min_distance_robot_env
         self.min_distance_robot_env_waypoint_checking = min(min_distance_robot_env, min_distance_robot_env_waypoint_checking)
@@ -175,7 +295,7 @@ class PbOMPL():
         # Should be unecessary if joint bounds is properly set
         # Check for joint bounds due to the bspline interpolation
         if check_bounds:
-            if np.any(np.logical_or(state < self.joint_bounds_np[:, 0], state > self.joint_bounds_np[:, 1])):
+            if np.any(np.logical_or(state < self.robot.joint_bounds_np[:, 0], state > self.robot.joint_bounds_np[:, 1])):
                 return False
 
         # check self-collision
@@ -380,7 +500,7 @@ class PbOMPL():
         start = self.robot.get_cur_state()
         return self.plan_start_goal(start, goal, allowed_time=allowed_time, **kwargs)
 
-    def execute(self, path, dynamics=False, sleep_time=0.05):
+    def execute(self, path, dynamics=False, sleep_time=0.05, substeps=10):
         '''
         Execute a planned plan. Will visualize in pybullet.
         Args:
@@ -388,6 +508,8 @@ class PbOMPL():
             dynamics: allow dynamic simulation. If dynamics is false, this API will use robot.set_state(),
                       meaning that the simulator will simply reset robot's state WITHOUT any dynamics simulation. Since the
                       path is collision free, this is somewhat acceptable.
+            sleep_time: float, sleep time between each step
+            substeps: int, number of physics simulations per step
         '''
         orig_robot_state = path[0]
         self.robot.set_state(orig_robot_state)
@@ -395,21 +517,38 @@ class PbOMPL():
             if dynamics:
                 for i in range(self.robot.num_dim):
                     p.setJointMotorControl2(self.robot.id, i, p.POSITION_CONTROL, q[i], force=5 * 240.)
+                for _ in range(substeps):
+                    p.stepSimulation()
             else:
                 self.robot.set_state(q)
-            p.stepSimulation()
+
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, max_tries=5000):
+    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=1000, **kwargs):
         """
-        Get a state not in collision
+        Get a state not in collision, with IK if ee_pose_target is not None
         """
-        for _ in range(max_tries):
-            rv = np.random.random(self.robot.num_dim)
-            state = self.joint_bounds_low + rv * (self.joint_bounds_high - self.joint_bounds_low)
-            if self.is_state_valid(state):
+        for j in range(max_tries):
+            print(f'\n---> Try {j} -- getting state not in collision')
+            if ee_pose_target is not None:
+                state = self.robot.run_ik(ee_pose_target, **kwargs)
+                if state is None:
+                    continue
+            else:
+                state = self.robot.get_random_joint_position()
+
+            if self.is_state_valid(state, check_bounds=True if ee_pose_target is not None else False):
                 return state
+            else:
+                print(f'State is in collision')
+
         raise RuntimeError("Failed to find a state not in collision")
+
+    def get_ee_pose(self, state, **kwargs):
+        """
+        Get end-effector pose
+        """
+        return self.robot.get_ee_pose(state, **kwargs)
 
     # -------------
     # Configurations
