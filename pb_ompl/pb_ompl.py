@@ -151,8 +151,6 @@ class PbOMPLRobot:
         assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
 
         print(f'Running Inverse Kinematics for {self.link_name_ee}...')
-        # ee_position_target = ee_pose_target[:3, 3]
-        # ee_orientation_target = ee_pose_target[:3, :3]
 
         ee_pose_target_in_world = pinocchio.SE3(ee_pose_target_in_world)
 
@@ -166,6 +164,8 @@ class PbOMPLRobot:
         IT_MAX = 1000
         DT = 1e-2
         damp = 1e-12
+
+        np_eye_6 = np.eye(6)
 
         i = 0
         while True:
@@ -196,7 +196,7 @@ class PbOMPLRobot:
                 self.pinocchio_robot_model, self.pinocchio_robot_model_data, q,
                 self.pinocchio_ee_parent_joint_id
             )
-            v = - J.T.dot(np.linalg.solve(J.dot(J.T) + damp * np.eye(6), err))
+            v = - J.T.dot(np.linalg.solve(J.dot(J.T) + damp * np_eye_6, err))
             q = pinocchio.integrate(self.pinocchio_robot_model, q, v * DT)
             if not i % 10 and debug:
                 print('%d: error = %s' % (i, err.T))
@@ -430,6 +430,12 @@ class PbOMPL():
                     tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=knots, task=-1)
                     tt, cc, k = tck
                     cc = np.array(cc)
+                    # initial and final velocity should be zero
+                    # set the second and second last control points to be the same as the first and last control points
+                    cc[:, 1] = cc[:, 0]
+                    cc[:, -2] = cc[:, -1]
+
+                    tck[1] = cc.copy()
 
                     bspline_params = tck
 
@@ -448,6 +454,7 @@ class PbOMPL():
                         for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
                             plt.plot(u_interpolation, joint, linestyle='dashed')
                             plt.plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
+                        plt.ylim(np.min(self.robot.joint_bounds_low_np), np.max(self.robot.joint_bounds_high_np))
                         plt.legend(loc='best')
                         plt.show()
 
