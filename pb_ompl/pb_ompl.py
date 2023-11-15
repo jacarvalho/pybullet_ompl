@@ -2,6 +2,8 @@ import math
 from functools import partial
 
 import numpy as np
+from scipy.spatial.transform import Rotation
+
 np.set_printoptions(precision=3, suppress=True)
 import pinocchio
 from scipy import interpolate
@@ -131,7 +133,7 @@ class PbOMPLRobot:
         state = self.joint_bounds_low_np + rv * (self.joint_bounds_high_np - self.joint_bounds_low_np)
         return state
 
-    def get_ee_pose(self, state, quat_wxyz=False, **kwargs):
+    def get_ee_pose(self, state, quat_wxyz=False, return_transformation=False, **kwargs):
         """
         Get end-effector pose
         """
@@ -142,7 +144,13 @@ class PbOMPLRobot:
         )[:2]
         if quat_wxyz:  # orientation in pybullet is xyzw
             orientation = [orientation[3], orientation[0], orientation[1], orientation[2]]
-        return [np.array(position), np.array(orientation)]
+        if return_transformation:
+            pose = np.eye(4)
+            pose[:3, :3] = Rotation.from_quat(orientation).as_matrix()
+            pose[:3, 3] = np.array(position)
+            return pose
+        else:
+            return [np.array(position), np.array(orientation)]
 
     def state_to_list(self, state):
         return [state[i] for i in range(self.num_dim)]
@@ -160,7 +168,7 @@ class PbOMPLRobot:
             q = ik_initial_pose + np.random.normal(0, 0.5, size=ik_initial_pose.shape)
             q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
 
-        eps = 1e-2
+        eps = 5e-3
         IT_MAX = 1000
         DT = 1e-2
         damp = 1e-12
@@ -298,8 +306,10 @@ class PbOMPL():
             if np.any(np.logical_or(state < self.robot.joint_bounds_np[:, 0], state > self.robot.joint_bounds_np[:, 1])):
                 return False
 
-        # check self-collision
+        # set the robot internal state
         self.robot.set_state(self.state_to_list(state))
+
+        # check self-collision
         for link1, link2 in self.check_link_pairs:
             if utils.pairwise_link_collision(self.robot_id, link1, self.robot_id, link2, max_distance=0.):  # max_distance=0: don't admit any self-collision
                 # print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
@@ -531,12 +541,13 @@ class PbOMPL():
 
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=500, **kwargs):
+    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=100, **kwargs):
         """
         Get a state not in collision, with IK if ee_pose_target is not None
         """
+        print(f'\n---> Getting state not in collision')
+        state_valid = None
         for j in range(max_tries):
-            print(f'\n---> Try {j} -- getting state not in collision')
             if ee_pose_target is not None:
                 state = self.robot.run_ik(ee_pose_target, **kwargs)
                 if state is None:
@@ -545,9 +556,12 @@ class PbOMPL():
                 state = self.robot.get_random_joint_position()
 
             if self.is_state_valid(state, check_bounds=True if ee_pose_target is not None else False):
-                return state
-            else:
-                print(f'State is in collision')
+                state_valid = state
+                break
+
+        if state_valid is not None:
+            print(f'...Found a valid state after {j} tries')
+            return state_valid
 
         raise RuntimeError("Failed to find a state not in collision")
 
