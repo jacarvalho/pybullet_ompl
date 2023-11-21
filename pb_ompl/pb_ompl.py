@@ -311,7 +311,8 @@ class PbOMPL():
 
         # check self-collision
         for link1, link2 in self.check_link_pairs:
-            if utils.pairwise_link_collision(self.robot_id, link1, self.robot_id, link2, max_distance=0.):  # max_distance=0: don't admit any self-collision
+            # max_distance=0: don't admit any self-collision
+            if utils.pairwise_link_collision(self.robot_id, link1, self.robot_id, link2, max_distance=0.):
                 # print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 return False
 
