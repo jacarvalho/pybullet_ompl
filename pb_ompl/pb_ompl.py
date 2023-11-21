@@ -410,8 +410,8 @@ class PbOMPL():
 
             if smooth_with_bspline:
                 ps = og.PathSimplifier(self.si)
-                print(f"shortcut path: {ps.shortcutPath(sol_path_geometric)}")
-                print(f"simplifymax path: {ps.simplifyMax(sol_path_geometric)}")
+                print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric)}")
+                print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
             sol_path_states = sol_path_geometric.getStates()
