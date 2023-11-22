@@ -25,7 +25,7 @@ class PlanarRobot2Link():
         robot_id = p.loadURDF(
             osp.join(osp.dirname(osp.abspath(__file__)), "../pb_ompl/models/planar_robot_2_link.urdf"),
             (0,0,0), useFixedBase = 1)
-        robot = PbOMPLRobot(robot_id)
+        robot = PbOMPLRobot(robot_id, link_name_ee='link_ee')
         self.robot = robot
 
         # setup pb_ompl

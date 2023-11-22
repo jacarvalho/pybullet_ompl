@@ -2,6 +2,7 @@ import math
 from functools import partial
 
 import numpy as np
+from matplotlib import cm
 from scipy.spatial.transform import Rotation
 
 np.set_printoptions(precision=3, suppress=True)
@@ -371,6 +372,8 @@ class PbOMPL():
                         create_bspline=False,
                         bspline_num_control_points=32,
                         bspline_degree=3,
+                        bspline_zero_vel_at_start_and_end=True,
+                        bspline_zero_acc_at_start_and_end=False,
                         debug=False,
                         **kwargs):
         '''
@@ -438,14 +441,25 @@ class PbOMPL():
                     knots = np.append(knots, np.linspace(1/(c-d), (c-d-1)/(c-d), c-d-1))
                     knots = np.append(knots, np.ones(d+1))
 
+                    # Fit a b-spline to the path
                     tck, u = interpolate.splprep(path_np.T, k=bspline_degree, t=knots, task=-1)
                     tt, cc, k = tck
                     cc = np.array(cc)
-                    # initial and final velocity should be zero
-                    # set the second and second last control points to be the same as the first and last control points
-                    cc[:, 1] = cc[:, 0]
-                    cc[:, -2] = cc[:, -1]
 
+                    if bspline_zero_vel_at_start_and_end:
+                        # The initial and final velocity should be zero
+                        # Set the second and second-to-last control points to be the same
+                        # as the first and last control points.
+                        cc[:, 1] = cc[:, 0].copy()
+                        cc[:, -2] = cc[:, -1].copy()
+                    if bspline_zero_acc_at_start_and_end:
+                        # The initial and final acceleration should be zero
+                        # Set the third and third-to-last control points to be the same
+                        # as the first and last control points.
+                        cc[:, 2] = cc[:, 0].copy()
+                        cc[:, -3] = cc[:, -1].copy()
+
+                    # Update the bspline parameters
                     tck[1] = cc.copy()
 
                     bspline_params = tck
@@ -458,23 +472,6 @@ class PbOMPL():
                     u_interpolation = np.linspace(0, 1, interpolate_num)
                     bspline_path_interpolated = bspl(u_interpolation)
                     sol_path_list = bspline_path_interpolated.tolist()
-
-                    if debug:
-                        import matplotlib.pyplot as plt
-                        plt.figure()
-                        for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
-                            plt.plot(u_interpolation, joint, linestyle='dashed')
-                            plt.plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
-                        plt.ylim(np.min(self.robot.joint_bounds_low_np), np.max(self.robot.joint_bounds_high_np))
-                        plt.legend(loc='best')
-                        plt.show()
-
-                        if cc.shape[0] == 2:
-                            plt.figure()
-                            plt.plot(cc.T[:, 0], cc.T[:, 1], marker='o', label='Control Points')
-                            plt.plot(bspline_path_interpolated[:, 0], bspline_path_interpolated[:, 1], c='b', lw=3, alpha=0.7)
-                            plt.show()
-
             except Exception as e:
                 print(f'Exception: {e}')
                 sol_path_list = []
@@ -505,6 +502,46 @@ class PbOMPL():
                 bspline_params = None
         else:
             print("No EXACT solution found\n")
+
+        # Plot the bspline for debugging
+        if debug and bspline_params is not None:
+            # import matplotlib.pyplot as plt
+            # fig, axs = plt.subplots(1, 2, squeeze=False)
+            # for i, (joint_spline, joint) in enumerate(zip(bspline_path_interpolated.T, path_np.T)):
+            #     axs[0, 0].plot(u_interpolation, joint, linestyle='dashed')
+            #     axs[0, 0].plot(u_interpolation, joint_spline, lw=3, alpha=0.7, label=f'BSpline-{i}', zorder=10)
+            # plt.ylim(np.min(self.robot.joint_bounds_low_np), np.max(self.robot.joint_bounds_high_np))
+            # plt.legend(loc='best')
+            # plt.show()
+
+            import matplotlib.pyplot as plt
+            fig, axs = plt.subplots(1, 3, figsize=(20, 6), squeeze=False)
+            # Get the trajectory velocity and acceleration
+            bspline_path_interpolated_vel = bspl(u_interpolation, nu=1)
+            bspline_path_interpolated_acc = bspl(u_interpolation, nu=2)
+            colors = cm.rainbow(np.linspace(0, 1, path_np.shape[1]))
+            for i, (joint_spline, joint_spline_vel, joint_spline_acc, joint_path) in enumerate(
+                    zip(bspline_path_interpolated.T, bspline_path_interpolated_vel.T, bspline_path_interpolated_acc.T,
+                        path_np.T)):
+                axs[0, 0].plot(u_interpolation, joint_path, linestyle='dashed', color=colors[i])
+                axs[0, 0].plot(u_interpolation, joint_spline, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}', zorder=10)
+                axs[0, 1].plot(u_interpolation, joint_spline_vel, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-vel', zorder=10)
+                axs[0, 2].plot(u_interpolation, joint_spline_acc, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-acc', zorder=10)
+
+            axs[0, 0].set_ylim(np.min(self.robot.joint_bounds_low_np), np.max(self.robot.joint_bounds_high_np))
+            axs[0, 0].legend(loc='best')
+            axs[0, 0].set_title('Position')
+            axs[0, 1].legend(loc='best')
+            axs[0, 1].set_title('Velocity')
+            axs[0, 2].legend(loc='best')
+            axs[0, 2].set_title('Acceleration')
+            plt.show()
+
+            if cc.shape[0] == 2:
+                plt.figure()
+                plt.plot(cc.T[:, 0], cc.T[:, 1], marker='o', label='Control Points')
+                plt.plot(bspline_path_interpolated[:, 0], bspline_path_interpolated[:, 1], c='b', lw=3, alpha=0.7)
+                plt.show()
 
         if create_bspline:
             return res, sol_path_list, bspline_params
