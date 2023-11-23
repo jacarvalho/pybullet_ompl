@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pybullet as p
 import pybullet_data
+from pybullet_utils import bullet_client
 
 from pb_ompl.pb_ompl import PbOMPL, PbOMPLRobot, add_sphere, add_box
 
@@ -14,23 +15,23 @@ class FrankaDemo():
     def __init__(self):
         self.obstacles = []
 
-        p.connect(p.GUI)
-        # p.setGravity(0, 0, -9.8)
-        p.setGravity(0, 0, 0)
-        p.setTimeStep(1./240.)
+        self.pybullet_client = bullet_client.BulletClient(p.GUI, options='')
+        # pybullet_client.setGravity(0, 0, -9.8)
+        self.pybullet_client.setGravity(0, 0, 0)
+        self.pybullet_client.setTimeStep(1./240.)
 
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-        p.loadURDF("plane.urdf")
+        self.pybullet_client.setAdditionalSearchPath(pybullet_data.getDataPath())
+        self.pybullet_client.loadURDF("plane.urdf")
 
         # load robot
         urdf_path = osp.join(osp.dirname(osp.abspath(__file__)),
                              "../pb_ompl/models/franka_description/robots/panda_arm_hand.urdf")
         robot_id = p.loadURDF(urdf_path,(0, 0, 0), useFixedBase=1)
-        robot = PbOMPLRobot(robot_id, urdf_path=urdf_path, link_name_ee="panda_hand")
+        robot = PbOMPLRobot(self.pybullet_client, robot_id, urdf_path=urdf_path, link_name_ee="panda_hand")
         self.robot = robot
 
         # setup pb_ompl
-        self.pb_ompl_interface = PbOMPL(self.robot, self.obstacles, min_distance_robot_env=0.01)
+        self.pb_ompl_interface = PbOMPL(self.pybullet_client, self.robot, self.obstacles, min_distance_robot_env=0.01)
         # self.pb_ompl_interface.set_planner("BITstar")
         self.pb_ompl_interface.set_planner("PRM")
         # self.pb_ompl_interface.set_planner("PRMstar")
@@ -48,14 +49,14 @@ class FrankaDemo():
 
     def add_obstacles(self):
         # add boxes
-        self.obstacles.append(add_box([1, 0, 0.7], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([1, 0, 0.1], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([-1, 0, 0.7], [0.5, 0.5, 0.05]))
-        self.obstacles.append(add_box([-1, 0, 0.1], [0.5, 0.5, 0.05]))
+        self.obstacles.append(add_box(self.pybullet_client, [1, 0, 0.7], [0.5, 0.5, 0.05]))
+        self.obstacles.append(add_box(self.pybullet_client, [1, 0, 0.1], [0.5, 0.5, 0.05]))
+        self.obstacles.append(add_box(self.pybullet_client, [-1, 0, 0.7], [0.5, 0.5, 0.05]))
+        self.obstacles.append(add_box(self.pybullet_client, [-1, 0, 0.1], [0.5, 0.5, 0.05]))
 
         # add spheres
-        self.obstacles.append(add_sphere([-1, 0, 0.1], 0.5))
-        self.obstacles.append(add_sphere([1, 0, 1], 0.2))
+        self.obstacles.append(add_sphere(self.pybullet_client, [-1, 0, 0.1], 0.5))
+        self.obstacles.append(add_sphere(self.pybullet_client, [1, 0, 1], 0.2))
 
         # store obstacles
         self.pb_ompl_interface.set_obstacles(self.obstacles)
@@ -81,10 +82,14 @@ class FrankaDemo():
 
         return res, path, bspline_params
 
+    def terminate(self):
+        self.pybullet_client.disconnect()
+
 
 if __name__ == '__main__':
     env = FrankaDemo()
     W_H_EE = np.eye(4)
     W_H_EE[:3, 3] = [0.6, 0.5, 0.4]
-    for _ in range(10):
+    for _ in range(2):
         env.demo(ee_pose_target=W_H_EE)
+    env.terminate()

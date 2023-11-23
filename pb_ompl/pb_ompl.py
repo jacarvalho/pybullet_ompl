@@ -38,15 +38,16 @@ class PbOMPLRobot:
     This parent class by default assumes that all joints are acutated and should be planned. If this is not your desired
     behaviour, please write your own inheritated class that overrides respective functionalities.
     '''
-    def __init__(self, id, urdf_path=None, link_name_ee=None) -> None:
+    def __init__(self, pybullet_client, id, urdf_path=None, link_name_ee=None) -> None:
         # Public attributes
+        self.pybullet_client = pybullet_client
         self.id = id
 
         assert link_name_ee is not None, "Please specify end-effector link name"
         self.link_name_ee = link_name_ee
 
         # prune fixed joints
-        all_joint_num = p.getNumJoints(id)
+        all_joint_num = self.pybullet_client.getNumJoints(id)
         all_joint_idx = list(range(all_joint_num))
         joint_idx = [j for j in all_joint_idx if self._is_not_fixed(j)]
         self.num_dim = len(joint_idx)
@@ -64,9 +65,9 @@ class PbOMPLRobot:
         self.joint_ranges_l = self.joint_ranges_np.tolist()
 
         # get link name to index
-        self._link_name_to_index = {p.getBodyInfo(id)[0].decode('UTF-8'): -1, }
-        for _id in range(p.getNumJoints(id)):
-            _name = p.getJointInfo(id, _id)[12].decode('UTF-8')
+        self._link_name_to_index = {self.pybullet_client.getBodyInfo(id)[0].decode('UTF-8'): -1, }
+        for _id in range(self.pybullet_client.getNumJoints(id)):
+            _name = self.pybullet_client.getJointInfo(id, _id)[12].decode('UTF-8')
             self._link_name_to_index[_name] = _id
 
         self.link_ee_idx = self._link_name_to_index[self.link_name_ee]
@@ -83,8 +84,8 @@ class PbOMPLRobot:
         self.reset()
 
     def _is_not_fixed(self, joint_idx):
-        joint_info = p.getJointInfo(self.id, joint_idx)
-        return joint_info[2] != p.JOINT_FIXED
+        joint_info = self.pybullet_client.getJointInfo(self.id, joint_idx)
+        return joint_info[2] != self.pybullet_client.JOINT_FIXED
 
     def get_joint_bounds(self):
         '''
@@ -93,7 +94,7 @@ class PbOMPLRobot:
         '''
         joint_bounds = []
         for i, joint_id in enumerate(self.joint_idx):
-            joint_info = p.getJointInfo(self.id, joint_id)
+            joint_info = self.pybullet_client.getJointInfo(self.id, joint_id)
             low = joint_info[8]  # lower bounds
             high = joint_info[9]  # higher bounds
             if low < high:
@@ -127,7 +128,7 @@ class PbOMPLRobot:
 
     def _set_joint_positions(self, joints, positions):
         for joint, value in zip(joints, positions):
-            p.resetJointState(self.id, joint, value, targetVelocity=0)
+            self.pybullet_client.resetJointState(self.id, joint, value, targetVelocity=0)
 
     def get_random_joint_position(self):
         rv = np.random.random(self.num_dim)
@@ -139,7 +140,7 @@ class PbOMPLRobot:
         Get end-effector pose
         """
         self.set_state(self.state_to_list(state))
-        position, orientation = p.getLinkState(
+        position, orientation = self.pybullet_client.getLinkState(
             self.id, self.link_ee_idx,
             # computeLinkVelocity=0, computeForwardKinematics=1
         )[:2]
@@ -252,7 +253,7 @@ class PbStateSpace(ob.RealVectorStateSpace):
 
 
 class PbOMPL():
-    def __init__(self, robot, obstacles = [],
+    def __init__(self, pybullet_client, robot, obstacles = [],
                  min_distance_robot_env=0.0,
                  min_distance_robot_env_waypoint_checking=0.01,
                  ) -> None:
@@ -261,6 +262,7 @@ class PbOMPL():
             robot: A PbOMPLRobot instance.
             obstacles: list of obstacle ids. Optional.
         '''
+        self.pybullet_client = pybullet_client
         self.robot = robot
         self.robot_id = robot.id
         self.obstacles = obstacles
@@ -313,7 +315,7 @@ class PbOMPL():
         # check self-collision
         for link1, link2 in self.check_link_pairs:
             # max_distance=0: don't admit any self-collision
-            if utils.pairwise_link_collision(self.robot_id, link1, self.robot_id, link2, max_distance=0.):
+            if utils.pairwise_link_collision(self.pybullet_client, self.robot_id, link1, self.robot_id, link2, max_distance=0.):
                 # print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
                 return False
 
@@ -322,6 +324,7 @@ class PbOMPL():
             max_distance = self.min_distance_robot_env
         for body1, body2 in self.check_body_pairs:
             if utils.pairwise_collision(
+                    self.pybullet_client,
                     body1, body2,
                     max_distance=max_distance):
                 # print('body collision', body1, body2)
@@ -330,9 +333,9 @@ class PbOMPL():
         return True
 
     def setup_collision_detection(self, robot, obstacles, self_collisions=True, allow_collision_links=[]):
-        self.check_link_pairs = utils.get_self_link_pairs(robot.id, robot.joint_idx) if self_collisions else []
+        self.check_link_pairs = utils.get_self_link_pairs(self.pybullet_client, robot.id, robot.joint_idx) if self_collisions else []
         moving_links = frozenset(
-            [item for item in utils.get_moving_links(robot.id, robot.joint_idx) if not item in allow_collision_links])
+            [item for item in utils.get_moving_links(self.pybullet_client, robot.id, robot.joint_idx) if not item in allow_collision_links])
         moving_bodies = [(robot.id, moving_links)]
         self.check_body_pairs = list(product(moving_bodies, obstacles))
 
@@ -485,6 +488,7 @@ class PbOMPL():
             else:
                 for sol_path in sol_path_list:
                     # Check if all states in the path are not in collision
+                    # They can be in collision due to the bspline interpolation
                     if not self.is_state_valid(
                             sol_path,
                             max_distance=self.min_distance_robot_env_waypoint_checking,
@@ -515,7 +519,7 @@ class PbOMPL():
             # plt.show()
 
             import matplotlib.pyplot as plt
-            fig, axs = plt.subplots(1, 3, figsize=(20, 6), squeeze=False)
+            fig, axs = plt.subplots(1, 3, figsize=(16, 6), squeeze=False)
             # Get the trajectory velocity and acceleration
             bspline_path_interpolated_vel = bspl(u_interpolation, nu=1)
             bspline_path_interpolated_acc = bspl(u_interpolation, nu=2)
@@ -571,9 +575,9 @@ class PbOMPL():
         for q in path:
             if dynamics:
                 for i in range(self.robot.num_dim):
-                    p.setJointMotorControl2(self.robot.id, i, p.POSITION_CONTROL, q[i], force=5 * 240.)
+                    self.pybullet_client.setJointMotorControl2(self.robot.id, i, self.pybullet_client.POSITION_CONTROL, q[i], force=5 * 240.)
                 for _ in range(substeps):
-                    p.stepSimulation()
+                    self.pybullet_client.stepSimulation()
             else:
                 self.robot.set_state(q)
 
@@ -626,17 +630,17 @@ class PbOMPL():
 
 ###############################################################################################################
 # HELPER FUNCTIONS
-def add_box(box_pos, half_box_size, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
-    colBoxId = p.createCollisionShape(p.GEOM_BOX, halfExtents=half_box_size)
-    box_id = p.createMultiBody(
+def add_box(pybullet_client, box_pos, half_box_size, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
+    colBoxId = pybullet_client.createCollisionShape(pybullet_client.GEOM_BOX, halfExtents=half_box_size)
+    box_id = pybullet_client.createMultiBody(
         baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=box_pos, baseOrientation=orientation
     )
     return box_id
 
 
-def add_sphere(sphere_pos, sphere_radius, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
-    colBoxId = p.createCollisionShape(p.GEOM_SPHERE, radius=sphere_radius)
-    sphere_id = p.createMultiBody(
+def add_sphere(pybullet_client, sphere_pos, sphere_radius, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
+    colBoxId = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius)
+    sphere_id = pybullet_client.createMultiBody(
         baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=sphere_pos, baseOrientation=orientation
     )
     return sphere_id
