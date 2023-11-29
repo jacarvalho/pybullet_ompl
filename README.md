@@ -31,6 +31,7 @@ git clone https://github.com/jacarvalho/pybullet_ompl.git
 cd pybullet_ompl
 git clone https://github.com/ompl/ompl.git
 cd ompl
+git checkout fca10b4bd4840856c7a9f50d1ee2688ba77e25aa
 mkdir -p build/Release
 cd build/Release
 # cmake ../.. -DPYTHON_EXEC=/path/to/python-X.Y  # This is important!!! Make sure you are pointing to the correct python version.
