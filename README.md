@@ -28,6 +28,7 @@ pip install -vU pygccxml pyplusplus
 It is very important that you compile ompl with the correct python version with the CMake flag.
 ```bash
 git clone https://github.com/jacarvalho/pybullet_ompl.git
+cd pybullet_ompl
 git clone https://github.com/ompl/ompl.git
 cd ompl
 mkdir -p build/Release
