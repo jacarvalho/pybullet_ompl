@@ -376,7 +376,7 @@ class PbOMPL():
                         bspline_num_control_points=32,
                         bspline_degree=3,
                         bspline_zero_vel_at_start_and_end=True,
-                        bspline_zero_acc_at_start_and_end=False,
+                        bspline_zero_acc_at_start_and_end=True,
                         debug=False,
                         **kwargs):
         '''
@@ -520,7 +520,7 @@ class PbOMPL():
 
             import matplotlib.pyplot as plt
             fig, axs = plt.subplots(1, 3, figsize=(16, 6), squeeze=False)
-            # Get the trajectory velocity and acceleration
+            # Get the trajectory velocity and acceleration from the b-spline
             bspline_path_interpolated_vel = bspl(u_interpolation, nu=1)
             bspline_path_interpolated_acc = bspl(u_interpolation, nu=2)
             colors = cm.rainbow(np.linspace(0, 1, path_np.shape[1]))
@@ -647,3 +647,17 @@ def add_sphere(pybullet_client, sphere_pos, sphere_radius, orientation=(0, 0, 0,
         baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=sphere_pos, baseOrientation=orientation
     )
     return sphere_id
+
+
+def finite_difference_vector(x, dt=1., method='central'):
+    # finite differences with zero padding at the borders
+    diff_vector = np.zeros_like(x)
+    if method == 'forward':
+        diff_vector[..., :-1, :] = np.diff(x, axis=-2) / dt
+    elif method == 'backward':
+        diff_vector[..., 1:, :] = (x[..., 1:, :] - x[..., :-1, :]) / dt
+    elif method == 'central':
+        diff_vector[..., 1:-1, :] = (x[..., 2:, :] - x[..., :-2, :]) / (2*dt)
+    else:
+        raise NotImplementedError
+    return diff_vector
