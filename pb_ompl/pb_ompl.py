@@ -374,6 +374,7 @@ class PbOMPL():
         self.ss.setPlanner(self.planner)
 
     def plan_start_goal(self, start, goal, allowed_time=DEFAULT_PLANNING_TIME,
+                        simplify_path=True,
                         smooth_with_bspline=False, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.01,
                         interpolate_num=INTERPOLATE_NUM,
                         create_bspline=False,
@@ -421,10 +422,11 @@ class PbOMPL():
 
             if smooth_with_bspline:
                 ps = og.PathSimplifier(self.si)
-                # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
-                # print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=1000)}")
-                print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-3)}")
-                # print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
+                if simplify_path:
+                    # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
+                    # print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=1000)}")
+                    print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-3)}")
+                    # print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
             sol_path_states = sol_path_geometric.getStates()
