@@ -424,7 +424,8 @@ class PbOMPL():
                 ps = og.PathSimplifier(self.si)
                 if simplify_path:
                     # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
-                    print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=100)}")
+                    print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=1000)}")
+                    # print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1.0)}")
                     # print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
@@ -596,6 +597,7 @@ class PbOMPL():
         """
         print(f'\n---> Getting state not in collision...')
         state_valid = None
+        state = None
         for j in range(max_tries):
             if ee_pose_target is not None:
                 state = self.robot.run_ik(ee_pose_target, **kwargs)
@@ -614,6 +616,9 @@ class PbOMPL():
 
         if not raise_error:
             return None
+
+        if ee_pose_target is not None and state is None:
+            raise RuntimeError(f"Failed to solve IK for:\n{ee_pose_target}")
 
         raise RuntimeError("Failed to find a state not in collision")
 
