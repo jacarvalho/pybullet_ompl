@@ -158,9 +158,11 @@ class PbOMPLRobot:
         return [state[i] for i in range(self.num_dim)]
 
     def run_ik(self, ee_pose_target_in_world, ik_initial_pose=None, debug=False, **kwargs):
+        # Gradient-based IK solver using pinochio
         assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
 
-        print(f'Running Inverse Kinematics for {self.link_name_ee}...')
+        if debug:
+            print(f'Running Inverse Kinematics for {self.link_name_ee}...')
 
         ee_pose_target_in_world = pinocchio.SE3(ee_pose_target_in_world)
 
@@ -170,7 +172,8 @@ class PbOMPLRobot:
             q = ik_initial_pose + np.random.normal(0, 0.5, size=ik_initial_pose.shape)
             q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
 
-        eps = 5e-3
+        eps_position = 1e-2
+        eps_orientation = np.deg2rad(1)
         IT_MAX = 1000
         DT = 1e-2
         damp = 1e-12
@@ -195,7 +198,7 @@ class PbOMPLRobot:
             err_position = err[:3]
             err_orientation = err[3:]
             # print(np.linalg.norm(err_position), np.linalg.norm(err_orientation))
-            if np.linalg.norm(err_position) < eps and np.linalg.norm(err_orientation) < eps:
+            if np.all(err_position < eps_position) and np.linalg.norm(err_orientation) < eps_orientation:
                 success = True
                 break
             if i >= IT_MAX:
@@ -212,16 +215,17 @@ class PbOMPLRobot:
                 print('%d: error = %s' % (i, err.T))
             i += 1
 
-        print('------------------')
-        print('IK RESULTS\n')
-        if success:
-            print("IK convergence achieved!")
-        else:
-            print("\nWarning: the iterative algorithm has not reached convergence to the desired precision")
+        if debug:
+            print('------------------')
+            print('IK RESULTS\n')
+            if success:
+                print("IK convergence achieved!")
+            else:
+                print("\nWarning: the iterative algorithm has not reached convergence to the desired precision")
 
-        print(f'\nIK joint position: {q.flatten()}')
-        print(f'\nIK error: {err.T}')
-        print(f'...Done Inverse Kinematics for {self.link_name_ee}\n')
+            print(f'\nIK joint position: {q.flatten()}')
+            print(f'\nIK error: {err.T}')
+            print(f'...Done Inverse Kinematics for {self.link_name_ee}\n')
 
         if success:
             return q.flatten().tolist()
@@ -370,6 +374,7 @@ class PbOMPL():
         self.ss.setPlanner(self.planner)
 
     def plan_start_goal(self, start, goal, allowed_time=DEFAULT_PLANNING_TIME,
+                        simplify_path=True,
                         smooth_with_bspline=False, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.01,
                         interpolate_num=INTERPOLATE_NUM,
                         create_bspline=False,
@@ -417,8 +422,10 @@ class PbOMPL():
 
             if smooth_with_bspline:
                 ps = og.PathSimplifier(self.si)
-                print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric)}")
-                print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
+                if simplify_path:
+                    # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
+                    print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=100)}")
+                    # print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
             sol_path_states = sol_path_geometric.getStates()
@@ -587,7 +594,7 @@ class PbOMPL():
         """
         Get a state not in collision, with IK if ee_pose_target is not None
         """
-        print(f'\n---> Getting state not in collision')
+        print(f'\n---> Getting state not in collision...')
         state_valid = None
         for j in range(max_tries):
             if ee_pose_target is not None:
@@ -597,12 +604,12 @@ class PbOMPL():
             else:
                 state = self.robot.get_random_joint_position()
 
-            if self.is_state_valid(state, check_bounds=True if ee_pose_target is not None else False):
+            if self.is_state_valid(state, check_bounds=True):
                 state_valid = state
                 break
 
         if state_valid is not None:
-            print(f'...Found a valid state after {j} tries')
+            print(f'...Found a valid state after {j}/{max_tries} tries')
             return state_valid
 
         if not raise_error:
