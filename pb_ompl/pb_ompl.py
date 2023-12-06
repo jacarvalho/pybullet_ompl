@@ -425,8 +425,9 @@ class PbOMPL():
                 if simplify_path:
                     # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
                     # print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=1000)}")
-                    print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-3)}")
-                    # print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
+                    # print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-3)}")
+                    # print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric)}")
+                    print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
                 ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
 
             sol_path_states = sol_path_geometric.getStates()
