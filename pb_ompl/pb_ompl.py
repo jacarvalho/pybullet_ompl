@@ -421,80 +421,6 @@ class PbOMPL():
             sol_path_list_raw_before_simplify = copy.deepcopy(sol_path_list)
             print(f'length before simplify+smooth: {len(sol_path_list)}')
 
-            if smooth_with_bspline:
-                ps = og.PathSimplifier(self.si)
-                if simplify_path:
-                    # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
-                    # print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric, maxSteps=1000)}")
-                    print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-1)}")
-                #     print(f"shortcut path return: {ps.shortcutPath(sol_path_geometric)}")
-                #     print(f"simplifymax path return: {ps.simplifyMax(sol_path_geometric)}")
-                # ps.smoothBSpline(sol_path_geometric, smooth_bspline_max_tries, smooth_bspline_min_change)
-
-            sol_path_states = sol_path_geometric.getStates()
-            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-            sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
-            print(f'length after simplify+smooth: {len(sol_path_list)}')
-
-            # interpolate
-            sol_path_geometric.interpolate(interpolate_num)
-            sol_path_states = sol_path_geometric.getStates()
-            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-            sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
-            print(f'length after interpolation: {len(sol_path_list)}')
-
-            ############################################################
-            # create bspline and check if all states are valid
-            try:
-                if create_bspline:
-                    sol_path_np = np.array(sol_path_list)
-
-                    # https://arxiv.org/pdf/2301.04330.pdf
-                    # these knots ensure the first and last control points are the start and goal states
-                    d = bspline_degree
-                    c = bspline_num_control_points
-                    knots = np.zeros(d+1)
-                    knots = np.append(knots, np.linspace(1/(c-d), (c-d-1)/(c-d), c-d-1))
-                    knots = np.append(knots, np.ones(d+1))
-
-                    # Fit a b-spline to the path
-                    tck, u = interpolate.splprep(sol_path_np.T, k=bspline_degree, t=knots, task=-1)
-                    tt, cc, k = tck
-                    cc = np.array(cc)
-
-                    if bspline_zero_vel_at_start_and_goal:
-                        # The initial and final velocity should be zero
-                        # Set the second and second-to-last control points to be the same
-                        # as the first and last control points.
-                        cc[:, 1] = cc[:, 0].copy()
-                        cc[:, -2] = cc[:, -1].copy()
-                    if bspline_zero_acc_at_start_and_goal:
-                        # The initial and final acceleration should be zero
-                        # Set the third and third-to-last control points to be the same
-                        # as the first and last control points.
-                        cc[:, 2] = cc[:, 0].copy()
-                        cc[:, -3] = cc[:, -1].copy()
-
-                    # Update the bspline parameters
-                    tck[1] = cc.copy()
-                    bspline_params = tck
-
-                    print(f'B-spline')
-                    print(f'u shape: {u.shape}')
-                    print(f'knots shape: {tt.shape}')
-                    print(f'coefficients shape: {cc.shape}')
-
-                    # Evaluate the b-spline for validity checking
-                    bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
-                    u_interpolation = np.linspace(0, 1, interpolate_num)
-                    bspline_path_interpolated_pos = bspl(u_interpolation)
-                    sol_path_list = bspline_path_interpolated_pos.tolist()
-            except Exception as e:
-                print(f'Exception: {e}')
-                sol_path_list = []
-                bspline_params = None
-
-            ############################################################
             print(f'Checking if all states are valid...')
             all_states_valid = True
             if len(sol_path_list) == 0:
@@ -510,14 +436,83 @@ class PbOMPL():
                         all_states_valid = False
                         break
 
-            if all_states_valid:
-                print(f'...all states are valid\n')
-                res = True
-            else:
+            ############################################################
+            if not all_states_valid:
                 print(f'...NOT all states are valid\n')
                 res = False
                 sol_path_list = []
                 bspline_params = None
+            else:
+                print(f'...all states are valid\n')
+                res = True
+
+                if simplify_path:
+                    ps = og.PathSimplifier(self.si)
+                    # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
+                    print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-1)}")
+
+                sol_path_states = sol_path_geometric.getStates()
+                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+                sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
+                print(f'length after simplify+smooth: {len(sol_path_list)}')
+
+                # interpolate
+                sol_path_geometric.interpolate(interpolate_num)
+                sol_path_states = sol_path_geometric.getStates()
+                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+                sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
+                print(f'length after interpolation: {len(sol_path_list)}')
+
+                ############################################################
+                # create bspline and check if all states are valid
+                try:
+                    if create_bspline:
+                        sol_path_np = np.array(sol_path_list)
+
+                        # https://arxiv.org/pdf/2301.04330.pdf
+                        # these knots ensure the first and last control points are the start and goal states
+                        d = bspline_degree
+                        c = bspline_num_control_points
+                        knots = np.zeros(d+1)
+                        knots = np.append(knots, np.linspace(1/(c-d), (c-d-1)/(c-d), c-d-1))
+                        knots = np.append(knots, np.ones(d+1))
+
+                        # Fit a b-spline to the path
+                        tck, u = interpolate.splprep(sol_path_np.T, k=bspline_degree, t=knots, task=-1)
+                        tt, cc, k = tck
+                        cc = np.array(cc)
+
+                        if bspline_zero_vel_at_start_and_goal:
+                            # The initial and final velocity should be zero
+                            # Set the second and second-to-last control points to be the same
+                            # as the first and last control points.
+                            cc[:, 1] = cc[:, 0].copy()
+                            cc[:, -2] = cc[:, -1].copy()
+                        if bspline_zero_acc_at_start_and_goal:
+                            # The initial and final acceleration should be zero
+                            # Set the third and third-to-last control points to be the same
+                            # as the first and last control points.
+                            cc[:, 2] = cc[:, 0].copy()
+                            cc[:, -3] = cc[:, -1].copy()
+
+                        # Update the bspline parameters
+                        tck[1] = cc.copy()
+                        bspline_params = tck
+
+                        print(f'B-spline')
+                        print(f'u shape: {u.shape}')
+                        print(f'knots shape: {tt.shape}')
+                        print(f'coefficients shape: {cc.shape}')
+
+                        # Evaluate the b-spline for validity checking
+                        bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
+                        u_interpolation = np.linspace(0, 1, interpolate_num)
+                        bspline_path_interpolated_pos = bspl(u_interpolation)
+                        sol_path_list = bspline_path_interpolated_pos.tolist()
+                except Exception as e:
+                    print(f'Exception: {e}')
+                    sol_path_list = []
+                    bspline_params = None
         else:
             print("No EXACT solution found\n")
 
