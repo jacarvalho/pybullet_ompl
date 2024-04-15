@@ -1,6 +1,7 @@
 import math
 from functools import partial
 
+import matplotlib
 import numpy as np
 from matplotlib import cm, pyplot as plt
 from scipy.spatial.transform import Rotation
@@ -559,13 +560,40 @@ class PbOMPL():
             plt.show()
 
             if cc.shape[0] == 2:
-                plt.figure()
-                plt.plot(sol_path_list_raw_before_simplify_np.T[0], sol_path_list_raw_before_simplify_np.T[1], marker='+', label='Raw Path')
-                plt.plot(sol_path_list_after_simplify_np.T[0], sol_path_list_after_simplify_np.T[1], marker='+', markersize=25, label='Simplified Path')
-                plt.plot(sol_path_list_after_interpolate_np.T[0], sol_path_list_after_interpolate_np.T[1], label='Interpolated Path')
-                plt.scatter(cc.T[:, 0], cc.T[:, 1], marker='o', color='orange', label='Control Points')
-                plt.plot(bspline_path_interpolated_pos[:, 0], bspline_path_interpolated_pos[:, 1], c='b', lw=3, alpha=0.7)
-                plt.legend(loc='best')
+                fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+
+                # q_limits_low = self.robot.joint_bounds_low_np
+                # q_limits_high = self.robot.joint_bounds_high_np
+                #
+                # # create meshgrid
+                # N = 300
+                # q1 = np.linspace(q_limits_low[0], q_limits_high[0], N)
+                # q2 = np.linspace(q_limits_low[1], q_limits_high[1], N)
+                # Q1, Q2 = np.meshgrid(q1, q2)
+                #
+                # # check if the state is valid for each point in the meshgrid
+                # valid = np.zeros(Q1.shape)
+                # for i in range(Q1.shape[0]):
+                #     for j in range(Q1.shape[1]):
+                #         valid[i, j] = self.is_state_valid(np.array([Q1[i, j], Q2[i, j]]))
+                #
+                # # plot the meshgrid and validity
+                #
+                # # plot the meshgrid
+                # cMap = matplotlib.colors.ListedColormap(['grey', 'white'])
+                # ax.contourf(Q1, Q2, valid, cmap=cMap)
+                #
+                # ax.set_xlabel('$q_1$ [rad]')
+                # ax.set_ylabel('$q_2$ [rad]')
+
+
+                ax.plot(sol_path_list_raw_before_simplify_np.T[0], sol_path_list_raw_before_simplify_np.T[1], marker='+', label='Raw Path')
+                ax.plot(sol_path_list_after_simplify_np.T[0], sol_path_list_after_simplify_np.T[1], marker='+', markersize=25, label='Simplified Path')
+                ax.plot(sol_path_list_after_interpolate_np.T[0], sol_path_list_after_interpolate_np.T[1], label='Interpolated Path')
+                ax.scatter(cc.T[:, 0], cc.T[:, 1], marker='o', color='orange', label='Control Points')
+                ax.plot(bspline_path_interpolated_pos[:, 0], bspline_path_interpolated_pos[:, 1], c='b', lw=3, alpha=0.7)
+                ax.legend(loc='best')
+
                 plt.show()
 
         if create_bspline:
