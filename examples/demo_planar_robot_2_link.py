@@ -63,7 +63,7 @@ class PlanarRobot2Link():
         print(f'goal: {goal}')
 
         self.robot.set_state(start)
-        res, path, bspline_params = self.pb_ompl_interface.plan(
+        results_dict = self.pb_ompl_interface.plan(
             goal,
             allowed_time=10.0,
             interpolate_num=250,
@@ -72,15 +72,11 @@ class PlanarRobot2Link():
             debug=True,
         )
 
-        if res:
-            # path = [[0., 0.] * len(path)]
-            self.pb_ompl_interface.execute(
-                path,
-                sleep_time=duration/len(path),
-                # sleep_time=100000
-            )
+        if results_dict['success']:
+            sol_path = results_dict['sol_path']
+            self.pb_ompl_interface.execute(sol_path, sleep_time=duration/len(sol_path))
 
-        return res, path, bspline_params
+        return results_dict
 
     def terminate(self):
         self.pybullet_client.disconnect()

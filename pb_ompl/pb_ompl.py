@@ -173,7 +173,7 @@ class PbOMPLRobot:
             q = ik_initial_pose + np.random.normal(0, 0.5, size=ik_initial_pose.shape)
             q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
 
-        eps_position = 1e-2
+        eps_position = 0.005
         eps_orientation = np.deg2rad(1)
         IT_MAX = 1000
         DT = 1e-2
@@ -376,18 +376,15 @@ class PbOMPL():
 
     def plan_start_goal(self, start, goal, allowed_time=DEFAULT_PLANNING_TIME,
                         simplify_path=True,
-                        smooth_with_bspline=False, smooth_bspline_max_tries=10000, smooth_bspline_min_change=0.01,
                         interpolate_num=INTERPOLATE_NUM,
-                        create_bspline=False,
+                        fit_bspline=False,
                         bspline_num_control_points=32,
                         bspline_degree=3,
                         bspline_zero_vel_at_start_and_goal=True,
                         bspline_zero_acc_at_start_and_goal=True,
                         debug=False,
                         **kwargs):
-        '''
-        plan a path to gaol from the given robot start state
-        '''
+        # plan a path from the given robot start state to goal
         # clear the planning data
         self.ss.clear()
 
@@ -408,133 +405,104 @@ class PbOMPL():
 
         # attempt to solve the problem within allowed planning time
         planner_status = self.ss.solve(allowed_time)
-        solved = self.ss.haveExactSolutionPath()
+        solved = self.ss.haveExactSolutionPath()  # check if the problem is solved exactly, and not just approximately
 
-        res = False
-        sol_path_list = []
+        success = False
+        sol_path_np = None
         bspline_params = None
+        sol_path_after_bspline_fit_np = None
+        all_states_valid_after_bspline_fit = False
+
         if solved:
-            print("\nFound solution: (smoothing and) interpolating into {} segments".format(interpolate_num))
+            success = True
+
+            print(f"\nFound solution: (smoothing and) interpolating into {interpolate_num} segments")
             sol_path_geometric = self.ss.getSolutionPath()
 
+            # Get the path
             sol_path_states = sol_path_geometric.getStates()
             sol_path_list = [self.state_to_list(state) for state in sol_path_states]
             sol_path_list_raw_before_simplify = copy.deepcopy(sol_path_list)
             print(f'length before simplify+smooth: {len(sol_path_list)}')
 
-            print(f'Checking if all states are valid...')
-            all_states_valid = True
-            if len(sol_path_list) == 0:
-                all_states_valid = False
-            else:
-                for sol_path in sol_path_list:
-                    # Check if all states in the path are not in collision.
-                    # They can be in collision due to the bspline fitting and interpolation
-                    if not self.is_state_valid(
-                            sol_path,
-                            max_distance=self.min_distance_robot_env_waypoint_checking,
-                            check_bounds=True):
-                        all_states_valid = False
-                        break
+            # Simplify path - shortcut, smooth, and interpolate
+            if simplify_path:
+                ps = og.PathSimplifier(self.si)
+                # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
+                # https://ompl.kavrakilab.org/PathSimplifier_8cpp_source.html - line 677
+                res_simplify = ps.simplify(sol_path_geometric, maxTime=1e-1)
+                print(f"simplify path return: {res_simplify}")
+
+            sol_path_states = sol_path_geometric.getStates()
+            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+            sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
+            print(f'length after simplify+smooth: {len(sol_path_list)}')
+
+            # interpolate
+            sol_path_geometric.interpolate(interpolate_num)
+            sol_path_states = sol_path_geometric.getStates()
+            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+            sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
+            print(f'length after interpolation: {len(sol_path_list)}')
+
+            sol_path_np = np.array(sol_path_list)
 
             ############################################################
-            if not all_states_valid:
-                print(f'...NOT all states are valid\n')
-                res = False
+            # create bspline and check if all states are valid
+            try:
+                if fit_bspline:
+                    bspline_params = fit_bspline_to_path(
+                        sol_path_np,
+                        bspline_degree,
+                        bspline_num_control_points,
+                        bspline_zero_vel_at_start_and_goal,
+                        bspline_zero_acc_at_start_and_goal,
+                    )
+                    tt, cc, k = bspline_params
+
+                    # Evaluate the b-spline for validity checking
+                    bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
+                    u_interpolation = np.linspace(0, 1, interpolate_num)
+                    bspline_path_interpolated_pos = bspl(u_interpolation)
+
+                    sol_path_after_bspline_fit_np = bspline_path_interpolated_pos
+                    sol_path_after_bspline_fit_list = bspline_path_interpolated_pos.tolist()
+
+                    # Check if after bspline fitting all states are not in collision
+                    print(f'Checking if all states are valid after B-spline fitting...')
+                    for sol_path in sol_path_after_bspline_fit_list:
+                        # Check if all states in the path are not in collision.
+                        # They can be in collision due to the bspline fitting and interpolation
+                        if not self.is_state_valid(
+                                sol_path,
+                                max_distance=self.min_distance_robot_env_waypoint_checking,
+                                check_bounds=True):
+                            all_states_valid_after_bspline_fit = False
+                            break
+                    if all_states_valid_after_bspline_fit:
+                        print(f'...all states are valid.')
+                    else:
+                        print(f'...NOT all states are valid.')
+
+            except Exception as e:
+                print(f'Exception: {e}')
                 sol_path_list = []
                 bspline_params = None
-            else:
-                print(f'...all states are valid\n')
-                res = True
-
-                if simplify_path:
-                    ps = og.PathSimplifier(self.si)
-                    # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
-                    print(f"simplify path return: {ps.simplify(sol_path_geometric, maxTime=1e-1)}")
-
-                sol_path_states = sol_path_geometric.getStates()
-                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-                sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
-                print(f'length after simplify+smooth: {len(sol_path_list)}')
-
-                # interpolate
-                sol_path_geometric.interpolate(interpolate_num)
-                sol_path_states = sol_path_geometric.getStates()
-                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-                sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
-                print(f'length after interpolation: {len(sol_path_list)}')
-
-                ############################################################
-                # create bspline and check if all states are valid
-                try:
-                    if create_bspline:
-                        sol_path_np = np.array(sol_path_list)
-
-                        # https://arxiv.org/pdf/2301.04330.pdf
-                        # these knots ensure the first and last control points are the start and goal states
-                        d = bspline_degree
-                        c = bspline_num_control_points
-                        knots = np.zeros(d+1)
-                        knots = np.append(knots, np.linspace(1/(c-d), (c-d-1)/(c-d), c-d-1))
-                        knots = np.append(knots, np.ones(d+1))
-
-                        # Fit a b-spline to the path
-                        tck, u = interpolate.splprep(sol_path_np.T, k=bspline_degree, t=knots, task=-1)
-                        tt, cc, k = tck
-                        cc = np.array(cc)
-
-                        if bspline_zero_vel_at_start_and_goal:
-                            # The initial and final velocity should be zero
-                            # Set the second and second-to-last control points to be the same
-                            # as the first and last control points.
-                            cc[:, 1] = cc[:, 0].copy()
-                            cc[:, -2] = cc[:, -1].copy()
-                        if bspline_zero_acc_at_start_and_goal:
-                            # The initial and final acceleration should be zero
-                            # Set the third and third-to-last control points to be the same
-                            # as the first and last control points.
-                            cc[:, 2] = cc[:, 0].copy()
-                            cc[:, -3] = cc[:, -1].copy()
-
-                        # Update the bspline parameters
-                        tck[1] = cc.copy()
-                        bspline_params = tck
-
-                        print(f'B-spline')
-                        print(f'u shape: {u.shape}')
-                        print(f'knots shape: {tt.shape}')
-                        print(f'coefficients shape: {cc.shape}')
-
-                        # Evaluate the b-spline for validity checking
-                        bspl = interpolate.BSpline(tt, cc.T, k)  # note the transpose
-                        u_interpolation = np.linspace(0, 1, interpolate_num)
-                        bspline_path_interpolated_pos = bspl(u_interpolation)
-                        sol_path_list = bspline_path_interpolated_pos.tolist()
-                except Exception as e:
-                    print(f'Exception: {e}')
-                    sol_path_list = []
-                    bspline_params = None
         else:
             print("No EXACT solution found\n")
 
         # Plot the bspline for debugging
-        if debug and bspline_params is not None:
+        if solved and debug:
             fig, axs = plt.subplots(1, 3, figsize=(16, 6), squeeze=False)
-            # Get the trajectory position, velocity and acceleration from the b-spline in phase space
+
             u_interpolation = np.linspace(0, 1, interpolate_num)
-            bspline_path_interpolated_pos = bspl(u_interpolation)
-            bspline_path_interpolated_vel = bspl(u_interpolation, nu=1)
-            bspline_path_interpolated_acc = bspl(u_interpolation, nu=2)
+
             colors = cm.rainbow(np.linspace(0, 1, sol_path_np.shape[1]))
             sol_path_list_raw_before_simplify_np = np.array(sol_path_list_raw_before_simplify)
             sol_path_list_after_simplify_np = np.array(sol_path_list_after_simplify)
             sol_path_list_after_interpolate_np = np.array(sol_path_list_after_interpolate)
-            for i, (bspline_path_dim_i_pos, bspline_path_dim_i_vel, bspline_path_dim_i_acc,
-                    sol_path_raw_before_simplify_dim_i_pos,
-                    sol_path_after_simplify_dim_i_pos,
-                    sol_path_after_interpolate_dim_i_pos) \
+            for i, (sol_path_raw_before_simplify_dim_i_pos, sol_path_after_simplify_dim_i_pos, sol_path_after_interpolate_dim_i_pos) \
                     in enumerate(zip(
-                        bspline_path_interpolated_pos.T, bspline_path_interpolated_vel.T, bspline_path_interpolated_acc.T,
                         sol_path_list_raw_before_simplify_np.T,
                         sol_path_list_after_simplify_np.T,
                         sol_path_list_after_interpolate_np.T)):
@@ -545,10 +513,19 @@ class PbOMPL():
                 #                linestyle='dotted', color=colors[i], marker='x', label=f'path-after-simplify-{i}-pos', zorder=10)
                 axs[0, 0].plot(u_interpolation, sol_path_after_interpolate_dim_i_pos, linestyle='solid', color=colors[i],
                                label=f'path-after-interpolate-{i}-pos', zorder=10)
-                # break
-                axs[0, 0].plot(u_interpolation, bspline_path_dim_i_pos, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-pos', zorder=10)
-                axs[0, 1].plot(u_interpolation, bspline_path_dim_i_vel, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-vel', zorder=10)
-                axs[0, 2].plot(u_interpolation, bspline_path_dim_i_acc, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-acc', zorder=10)
+
+            # Get the trajectory position, velocity and acceleration from the b-spline in phase space
+            if bspline_params is not None:
+                bspline_path_interpolated_pos = bspl(u_interpolation)
+                bspline_path_interpolated_vel = bspl(u_interpolation, nu=1)
+                bspline_path_interpolated_acc = bspl(u_interpolation, nu=2)
+
+                for i, (bspline_path_dim_i_pos, bspline_path_dim_i_vel, bspline_path_dim_i_acc) \
+                        in enumerate(zip(
+                            bspline_path_interpolated_pos.T, bspline_path_interpolated_vel.T, bspline_path_interpolated_acc.T)):
+                    axs[0, 0].plot(u_interpolation, bspline_path_dim_i_pos, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-pos', zorder=10)
+                    axs[0, 1].plot(u_interpolation, bspline_path_dim_i_vel, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-vel', zorder=10)
+                    axs[0, 2].plot(u_interpolation, bspline_path_dim_i_acc, lw=3, alpha=0.7, color=colors[i], label=f'BSpline-{i}-acc', zorder=10)
 
             axs[0, 0].set_ylim(np.min(self.robot.joint_bounds_low_np), np.max(self.robot.joint_bounds_high_np))
             axs[0, 0].legend(loc='best')
@@ -559,47 +536,52 @@ class PbOMPL():
             axs[0, 2].set_title('Acceleration')
             plt.show()
 
-            if cc.shape[0] == 2:
+            if sol_path_np.shape[1] == 2:
                 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 
-                # q_limits_low = self.robot.joint_bounds_low_np
-                # q_limits_high = self.robot.joint_bounds_high_np
-                #
-                # # create meshgrid
-                # N = 300
-                # q1 = np.linspace(q_limits_low[0], q_limits_high[0], N)
-                # q2 = np.linspace(q_limits_low[1], q_limits_high[1], N)
-                # Q1, Q2 = np.meshgrid(q1, q2)
-                #
-                # # check if the state is valid for each point in the meshgrid
-                # valid = np.zeros(Q1.shape)
-                # for i in range(Q1.shape[0]):
-                #     for j in range(Q1.shape[1]):
-                #         valid[i, j] = self.is_state_valid(np.array([Q1[i, j], Q2[i, j]]))
-                #
-                # # plot the meshgrid and validity
-                #
-                # # plot the meshgrid
-                # cMap = matplotlib.colors.ListedColormap(['grey', 'white'])
-                # ax.contourf(Q1, Q2, valid, cmap=cMap)
-                #
-                # ax.set_xlabel('$q_1$ [rad]')
-                # ax.set_ylabel('$q_2$ [rad]')
+                q_limits_low = self.robot.joint_bounds_low_np
+                q_limits_high = self.robot.joint_bounds_high_np
 
+                # create meshgrid
+                N = 100
+                q1 = np.linspace(q_limits_low[0], q_limits_high[0], N)
+                q2 = np.linspace(q_limits_low[1], q_limits_high[1], N)
+                Q1, Q2 = np.meshgrid(q1, q2)
+
+                # check if the state is valid for each point in the meshgrid
+                valid = np.zeros(Q1.shape)
+                for i in range(Q1.shape[0]):
+                    for j in range(Q1.shape[1]):
+                        valid[i, j] = self.is_state_valid(np.array([Q1[i, j], Q2[i, j]]))
+
+                # plot the meshgrid and validity
+
+                # plot the meshgrid
+                cMap = matplotlib.colors.ListedColormap(['grey', 'white'])
+                ax.contourf(Q1, Q2, valid, cmap=cMap)
+
+                ax.set_xlabel('$q_1$ [rad]')
+                ax.set_ylabel('$q_2$ [rad]')
 
                 ax.plot(sol_path_list_raw_before_simplify_np.T[0], sol_path_list_raw_before_simplify_np.T[1], marker='+', label='Raw Path')
                 ax.plot(sol_path_list_after_simplify_np.T[0], sol_path_list_after_simplify_np.T[1], marker='+', markersize=25, label='Simplified Path')
                 ax.plot(sol_path_list_after_interpolate_np.T[0], sol_path_list_after_interpolate_np.T[1], label='Interpolated Path')
-                ax.scatter(cc.T[:, 0], cc.T[:, 1], marker='o', color='orange', label='Control Points')
-                ax.plot(bspline_path_interpolated_pos[:, 0], bspline_path_interpolated_pos[:, 1], c='b', lw=3, alpha=0.7)
+                if bspline_params is not None:
+                    ax.scatter(cc.T[:, 0], cc.T[:, 1], marker='o', color='orange', label='Control Points')
+                    ax.plot(bspline_path_interpolated_pos[:, 0], bspline_path_interpolated_pos[:, 1], c='b', lw=3, alpha=0.7)
                 ax.legend(loc='best')
 
                 plt.show()
 
-        if create_bspline:
-            return res, sol_path_list, bspline_params
-        else:
-            return res, sol_path_list
+        results_dict = dict(
+            success=success,
+            sol_path=sol_path_np,
+            bspline_params=bspline_params,
+            sol_path_after_bspline_fit=sol_path_after_bspline_fit_np,
+            all_states_valid_after_bspline_fit=all_states_valid_after_bspline_fit
+        )
+
+        return results_dict
 
     def plan(self, goal, allowed_time=DEFAULT_PLANNING_TIME, **kwargs):
         '''
@@ -624,7 +606,8 @@ class PbOMPL():
         for q in path:
             if dynamics:
                 for i in range(self.robot.num_dim):
-                    self.pybullet_client.setJointMotorControl2(self.robot.id, i, self.pybullet_client.POSITION_CONTROL, q[i], force=5 * 240.)
+                    self.pybullet_client.setJointMotorControl2(
+                        self.robot.id, i, self.pybullet_client.POSITION_CONTROL, q[i], force=5 * 240.)
                 for _ in range(substeps):
                     self.pybullet_client.stepSimulation()
             else:
@@ -686,20 +669,37 @@ class PbOMPL():
 
 ###############################################################################################################
 # HELPER FUNCTIONS
-def add_box(pybullet_client, box_pos, half_box_size, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
-    colBoxId = pybullet_client.createCollisionShape(pybullet_client.GEOM_BOX, halfExtents=half_box_size)
-    box_id = pybullet_client.createMultiBody(
-        baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=box_pos, baseOrientation=orientation
+def add_box(pybullet_client, box_pos, half_box_size,
+            orientation=(0, 0, 0, 1),  # orientation quaternion xyzw
+            color=(220./255., 220./255., 220./255., 1.0)):
+    col_id = pybullet_client.createCollisionShape(pybullet_client.GEOM_BOX, halfExtents=half_box_size)
+    visual_id = pybullet_client.createVisualShape(
+        pybullet_client.GEOM_BOX, halfExtents=half_box_size, rgbaColor=color
     )
-    return box_id
+    body_id = pybullet_client.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=col_id,
+        baseVisualShapeIndex=visual_id,
+        basePosition=box_pos, baseOrientation=orientation
+    )
+    return body_id
 
 
-def add_sphere(pybullet_client, sphere_pos, sphere_radius, orientation=(0, 0, 0, 1)):  # orientation quaternion xyzw
-    colBoxId = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius)
-    sphere_id = pybullet_client.createMultiBody(
-        baseMass=0, baseCollisionShapeIndex=colBoxId, basePosition=sphere_pos, baseOrientation=orientation
+def add_sphere(pybullet_client, sphere_pos, sphere_radius,
+               orientation=(0, 0, 0, 1),  # orientation quaternion xyzw
+               color=(220./255., 220./255., 220./255., 1.0)
+               ):
+    col_id = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius)
+    visual_id = pybullet_client.createVisualShape(
+        pybullet_client.GEOM_SPHERE, radius=sphere_radius, rgbaColor=color
     )
-    return sphere_id
+    body_id = pybullet_client.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=col_id,
+        baseVisualShapeIndex=visual_id,
+        basePosition=sphere_pos, baseOrientation=orientation
+    )
+    return body_id
 
 
 def finite_difference_vector(x, dt=1., method='central'):
@@ -714,3 +714,56 @@ def finite_difference_vector(x, dt=1., method='central'):
     else:
         raise NotImplementedError
     return diff_vector
+
+
+def fit_bspline_to_path(
+        path,
+        bspline_degree,
+        bspline_num_control_points,
+        bspline_zero_vel_at_start_and_goal,
+        bspline_zero_acc_at_start_and_goal,
+        **kwargs
+):
+    """
+    Fit a B-spline to the path.
+    """
+    print(f'\nFitting B-spline')
+
+    # https://arxiv.org/pdf/2301.04330.pdf
+    # These knots ensure that the first and last control points are the start and goal states
+    d = bspline_degree
+    c = bspline_num_control_points
+    knots = np.zeros(d + 1)
+    knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
+    knots = np.append(knots, np.ones(d + 1))
+
+    # Fit a b-spline to the path
+    tck, u = interpolate.splprep(path.T, k=bspline_degree, t=knots, task=-1, quiet=True)
+    tt, cc, k = tck
+    cc = np.array(cc)
+
+    print(f'u shape: {u.shape}')
+    print(f'knots shape: {tt.shape}')
+    print(f'coefficients shape: {cc.shape}')
+
+    if bspline_zero_vel_at_start_and_goal:
+        # The initial and final velocity should be zero
+        # Set the second and second-to-last control points to be the same
+        # as the first and last control points.
+        # assign the control points to the start and goal states - https://arxiv.org/pdf/2301.04330.pdf
+        cc[:, 0] = path[0].copy()
+        cc[:, -1] = path[-1].copy()
+        cc[:, 1] = cc[:, 0].copy()
+        cc[:, -2] = cc[:, -1].copy()
+    if bspline_zero_acc_at_start_and_goal:
+        # The initial and final acceleration should be zero
+        # Set the third and third-to-last control points to be the same
+        # as the first and last control points.
+        cc[:, 2] = cc[:, 0].copy()
+        cc[:, -3] = cc[:, -1].copy()
+
+    # Update the bspline parameters
+    tck[1] = cc.copy()
+    bspline_params = tck
+    return bspline_params
+

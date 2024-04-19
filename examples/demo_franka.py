@@ -68,7 +68,7 @@ class FrankaDemo():
         print(f'goal: {goal}')
 
         self.robot.set_state(start)
-        res, path, bspline_params = self.pb_ompl_interface.plan(
+        results_dict = self.pb_ompl_interface.plan(
             goal,
             allowed_time=3.0,
             interpolate_num=250,
@@ -77,10 +77,11 @@ class FrankaDemo():
             debug=True,
         )
 
-        if res:
-            self.pb_ompl_interface.execute(path, sleep_time=duration/len(path))
+        if results_dict['success']:
+            sol_path = results_dict['sol_path']
+            self.pb_ompl_interface.execute(sol_path, sleep_time=duration/len(sol_path))
 
-        return res, path, bspline_params
+        return results_dict
 
     def terminate(self):
         self.pybullet_client.disconnect()
