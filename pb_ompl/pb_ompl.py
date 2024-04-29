@@ -448,7 +448,7 @@ class PbOMPL():
             sol_path_np = np.array(sol_path_list)
 
             ############################################################
-            # create bspline and check if all states are valid
+            # fit a bspline and check if all states are valid
             try:
                 if fit_bspline:
                     bspline_params = fit_bspline_to_path(
@@ -465,16 +465,13 @@ class PbOMPL():
                     u_interpolation = np.linspace(0, 1, interpolate_num)
                     bspline_path_interpolated_pos = bspl(u_interpolation)
 
-                    sol_path_after_bspline_fit_np = bspline_path_interpolated_pos
-                    sol_path_after_bspline_fit_list = bspline_path_interpolated_pos.tolist()
-
                     # Check if after bspline fitting all states are not in collision
                     print(f'Checking if all states are valid after B-spline fitting...')
-                    for sol_path in sol_path_after_bspline_fit_list:
+                    for state_in_path in bspline_path_interpolated_pos:
                         # Check if all states in the path are not in collision.
                         # They can be in collision due to the bspline fitting and interpolation
                         if not self.is_state_valid(
-                                sol_path,
+                                state_in_path,
                                 max_distance=self.min_distance_robot_env_waypoint_checking,
                                 check_bounds=True):
                             all_states_valid_after_bspline_fit = False
