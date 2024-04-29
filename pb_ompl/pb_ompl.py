@@ -719,12 +719,13 @@ def fit_bspline_to_path(
         bspline_num_control_points,
         bspline_zero_vel_at_start_and_goal,
         bspline_zero_acc_at_start_and_goal,
+        debug=False,
         **kwargs
 ):
     """
     Fit a B-spline to the path.
     """
-    print(f'\nFitting B-spline')
+    print(f'\nFitting B-spline') if debug else None
 
     # https://arxiv.org/pdf/2301.04330.pdf
     # These knots ensure that the first and last control points are the start and goal states
@@ -739,9 +740,9 @@ def fit_bspline_to_path(
     tt, cc, k = tck
     cc = np.array(cc)
 
-    print(f'u shape: {u.shape}')
-    print(f'knots shape: {tt.shape}')
-    print(f'coefficients shape: {cc.shape}')
+    print(f'u shape: {u.shape}') if debug else None
+    print(f'knots shape: {tt.shape}') if debug else None
+    print(f'coefficients shape: {cc.shape}') if debug else None
 
     if bspline_zero_vel_at_start_and_goal:
         # The initial and final velocity should be zero
