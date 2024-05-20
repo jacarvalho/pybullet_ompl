@@ -292,7 +292,7 @@ class PbOMPL():
         #                                                 custom_limits={}, max_distance=0, allow_collision_links=[])
 
         self.set_obstacles(obstacles)
-        self.set_planner("RRT") # RRT by default
+        self.set_planner("RRT")  # RRT by default
 
     def set_obstacles(self, obstacles):
         self.obstacles = obstacles
@@ -385,12 +385,14 @@ class PbOMPL():
                         debug=False,
                         **kwargs):
         # plan a path from the given robot start state to goal
-        # clear the planning data
+        # clear any existing planning data
+        st = time.time()
         self.ss.clear()
 
-        print("\n#################################################################################")
-        print("START planning")
-        print(self.planner.params())
+        if debug:
+            print("\n#################################################################################")
+            print("START planning")
+            print(self.planner.params())
 
         orig_robot_state = self.robot.get_cur_state()
 
@@ -416,35 +418,42 @@ class PbOMPL():
         if solved:
             success = True
 
-            print(f"\nFound solution: (smoothing and) interpolating into {interpolate_num} segments")
+            if debug:
+                print(f"\nFound solution: (smoothing and) interpolating into {interpolate_num} segments")
             sol_path_geometric = self.ss.getSolutionPath()
 
             # Get the path
-            sol_path_states = sol_path_geometric.getStates()
-            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-            sol_path_list_raw_before_simplify = copy.deepcopy(sol_path_list)
-            print(f'length before simplify+smooth: {len(sol_path_list)}')
+            if debug:
+                sol_path_states = sol_path_geometric.getStates()
+                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+                sol_path_list_raw_before_simplify = copy.deepcopy(sol_path_list)
+                print(f'length before simplify+smooth: {len(sol_path_list)}')
 
             # Simplify path - shortcut, smooth, and interpolate
             if simplify_path:
                 ps = og.PathSimplifier(self.si)
+                # Simplify the path
                 # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
-                # https://ompl.kavrakilab.org/PathSimplifier_8cpp_source.html - line 677
+                # https://ompl.kavrakilab.org/PathSimplifier_8cpp_source.html - lines 677
                 res_simplify = ps.simplify(sol_path_geometric, maxTime=1e-1)
-                print(f"simplify path return: {res_simplify}")
+                if debug:
+                    print(f"simplify path return: {res_simplify}")
 
-            sol_path_states = sol_path_geometric.getStates()
-            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-            sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
-            print(f'length after simplify+smooth: {len(sol_path_list)}')
+            if debug:
+                sol_path_states = sol_path_geometric.getStates()
+                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+                sol_path_list_after_simplify = copy.deepcopy(sol_path_list)
+                print(f'length after simplify+smooth: {len(sol_path_list)}')
 
             # interpolate
             sol_path_geometric.interpolate(interpolate_num)
-            sol_path_states = sol_path_geometric.getStates()
-            sol_path_list = [self.state_to_list(state) for state in sol_path_states]
-            sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
-            print(f'length after interpolation: {len(sol_path_list)}')
+            if debug:
+                sol_path_states = sol_path_geometric.getStates()
+                sol_path_list = [self.state_to_list(state) for state in sol_path_states]
+                sol_path_list_after_interpolate = copy.deepcopy(sol_path_list)
+                print(f'length after interpolation: {len(sol_path_list)}')
 
+            sol_path_list = [self.state_to_list(state) for state in sol_path_geometric.getStates()]
             sol_path_np = np.array(sol_path_list)
 
             ############################################################
@@ -466,7 +475,8 @@ class PbOMPL():
                     bspline_path_interpolated_pos = bspl(u_interpolation)
 
                     # Check if after bspline fitting all states are not in collision
-                    print(f'Checking if all states are valid after B-spline fitting...')
+                    if debug:
+                        print(f'Checking if all states are valid after B-spline fitting...')
                     for state_in_path in bspline_path_interpolated_pos:
                         # Check if all states in the path are not in collision.
                         # They can be in collision due to the bspline fitting and interpolation
@@ -477,9 +487,11 @@ class PbOMPL():
                             all_states_valid_after_bspline_fit = False
                             break
                     if all_states_valid_after_bspline_fit:
-                        print(f'...all states are valid.')
+                        if debug:
+                            print(f'...all states are valid.')
                     else:
-                        print(f'...NOT all states are valid.')
+                        if debug:
+                            print(f'...NOT all states are valid.')
 
             except Exception as e:
                 print(f'Exception: {e}')
@@ -612,11 +624,12 @@ class PbOMPL():
 
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=500, raise_error=True, **kwargs):
+    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=100, raise_error=True, debug=False, **kwargs):
         """
         Get a state not in collision, with IK if ee_pose_target is not None
         """
-        print(f'\n---> Getting state not in collision...')
+        if debug:
+            print(f'\n---> Getting state not in collision...')
         state_valid = None
         state = None
         for j in range(max_tries):
@@ -632,7 +645,8 @@ class PbOMPL():
                 break
 
         if state_valid is not None:
-            print(f'...Found a valid state after {j}/{max_tries} tries')
+            if debug:
+                print(f'...Found a valid state after {j}/{max_tries} tries')
             return state_valid
 
         if not raise_error:
@@ -728,6 +742,7 @@ def fit_bspline_to_path(
     print(f'\nFitting B-spline') if debug else None
 
     # https://arxiv.org/pdf/2301.04330.pdf
+    # Equally spaced knots.
     # These knots ensure that the first and last control points are the start and goal states
     d = bspline_degree
     c = bspline_num_control_points
