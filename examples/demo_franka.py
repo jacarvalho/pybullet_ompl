@@ -26,7 +26,8 @@ class FrankaDemo():
         # load robot
         urdf_path = osp.join(osp.dirname(osp.abspath(__file__)),
                              "../pb_ompl/models/franka_description/robots/panda_arm_hand.urdf")
-        robot_id = p.loadURDF(urdf_path,(0, 0, 0), useFixedBase=1)
+        robot_id = p.loadURDF(urdf_path,(0, 0, 0), useFixedBase=1,
+                              flags=p.URDF_USE_SELF_COLLISION)
         robot = PbOMPLRobot(self.pybullet_client, robot_id, urdf_path=urdf_path, link_name_ee="panda_hand")
         self.robot = robot
 
