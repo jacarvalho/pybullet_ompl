@@ -624,7 +624,7 @@ class PbOMPL():
 
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=100, raise_error=True, debug=False, **kwargs):
+    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=500, raise_error=True, debug=False, **kwargs):
         """
         Get a state not in collision, with IK if ee_pose_target is not None
         """
