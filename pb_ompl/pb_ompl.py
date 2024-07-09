@@ -727,6 +727,21 @@ def finite_difference_vector(x, dt=1., method='central'):
     return diff_vector
 
 
+def create_bspline_knots(num_control_points, degree):
+    """
+    Create the knots for a B-spline.
+    # https://arxiv.org/pdf/2301.04330.pdf
+    # Equally spaced knots.
+    # These knots ensure that the first and last control points are the start and goal states
+    """
+    d = degree
+    c = num_control_points
+    knots = np.zeros(d + 1)
+    knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
+    knots = np.append(knots, np.ones(d + 1))
+    return knots
+
+
 def fit_bspline_to_path(
         path,
         bspline_degree,
@@ -741,14 +756,7 @@ def fit_bspline_to_path(
     """
     print(f'\nFitting B-spline') if debug else None
 
-    # https://arxiv.org/pdf/2301.04330.pdf
-    # Equally spaced knots.
-    # These knots ensure that the first and last control points are the start and goal states
-    d = bspline_degree
-    c = bspline_num_control_points
-    knots = np.zeros(d + 1)
-    knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
-    knots = np.append(knots, np.ones(d + 1))
+    knots = create_bspline_knots(bspline_num_control_points, bspline_degree)
 
     # Fit a b-spline to the path
     tck, u = interpolate.splprep(path.T, k=bspline_degree, t=knots, task=-1, quiet=True)
