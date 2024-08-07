@@ -79,7 +79,7 @@ class PbOMPLRobot:
             self.pinocchio_robot_model = pinocchio.buildModelFromUrdf(urdf_path)
             self.pinocchio_robot_model_data = self.pinocchio_robot_model.createData()
             self.pinocchio_ee_frameid = self.pinocchio_robot_model.getFrameId(self.link_name_ee)
-            self.pinocchio_ee_parent_joint_id = self.pinocchio_robot_model.frames[self.pinocchio_ee_frameid].parentJoint
+            self.pinocchio_ee_parent_joint_id = self.pinocchio_robot_model.frames[self.pinocchio_ee_frameid].parent
 
         ############################################################
         self.reset()
