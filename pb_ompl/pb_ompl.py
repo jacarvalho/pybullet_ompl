@@ -199,7 +199,7 @@ class PbOMPLRobot:
             err_position = err[:3]
             err_orientation = err[3:]
             # print(np.linalg.norm(err_position), np.linalg.norm(err_orientation))
-            if np.all(err_position < eps_position) and np.linalg.norm(err_orientation) < eps_orientation:
+            if np.all(np.abs(err_position) < eps_position) and np.linalg.norm(err_orientation) < eps_orientation:
                 success = True
                 break
             if i >= IT_MAX:
