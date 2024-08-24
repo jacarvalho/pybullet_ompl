@@ -736,9 +736,12 @@ def create_bspline_knots(num_control_points, degree):
     """
     d = degree
     c = num_control_points
-    knots = np.zeros(d + 1)
-    knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
-    knots = np.append(knots, np.ones(d + 1))
+    m = d + c
+    knots = np.pad(np.linspace(0., 1., m + 1 - 2 * d), d, 'edge')
+    # OLD implementation (for reference)
+    # knots = np.zeros(d + 1)
+    # knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
+    # knots = np.append(knots, np.ones(d + 1))
     return knots
 
 
