@@ -158,23 +158,24 @@ class PbOMPLRobot:
     def state_to_list(self, state):
         return [state[i] for i in range(self.num_dim)]
 
-    def run_ik(self, ee_pose_target_in_world, ik_initial_pose=None, debug=False, **kwargs):
+    def run_ik(
+            self, world_H_EEtarget, q_initial=None, debug=False,
+            eps_position=0.005, eps_orientation = np.deg2rad(1.0),
+            **kwargs):
         # Gradient-based IK solver using pinochio
         assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
 
         if debug:
             print(f'Running Inverse Kinematics for {self.link_name_ee}...')
 
-        ee_pose_target_in_world = pinocchio.SE3(ee_pose_target_in_world)
+        world_H_EEtarget = pinocchio.SE3(world_H_EEtarget)
 
-        if ik_initial_pose is None:
+        if q_initial is None:
             q = self.get_random_joint_position()
         else:
-            q = ik_initial_pose + np.random.normal(0, 0.5, size=ik_initial_pose.shape)
+            q = q_initial + np.random.normal(0, 0.5, size=q_initial.shape)
             q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
 
-        eps_position = 0.005
-        eps_orientation = np.deg2rad(1)
         IT_MAX = 1000
         DT = 1e-2
         damp = 1e-12
@@ -188,23 +189,24 @@ class PbOMPLRobot:
             pinocchio.framesForwardKinematics(self.pinocchio_robot_model, self.pinocchio_robot_model_data, q)
 
             # Transform the EE target pose from the robot base frame to the (local/parent) joint frame
-            joint_pose_in_world = self.pinocchio_robot_model_data.oMi[self.pinocchio_ee_parent_joint_id]
-            ee_pose_in_world = self.pinocchio_robot_model_data.oMf[self.pinocchio_ee_frameid]
+            world_H_joint = self.pinocchio_robot_model_data.oMi[self.pinocchio_ee_parent_joint_id]
+            world_H_EE = self.pinocchio_robot_model_data.oMf[self.pinocchio_ee_frameid]
 
-            ee_pose_target_in_joint = ee_pose_target_in_world.act(ee_pose_in_world.actInv(joint_pose_in_world))
+            joint_H_EEtarget = world_H_EEtarget.act(world_H_EE.actInv(world_H_joint))
 
-            dMi = ee_pose_target_in_joint.actInv(joint_pose_in_world)
+            dMi = joint_H_EEtarget.actInv(world_H_joint)
 
+            # The error is computed in the joint frame
             err = pinocchio.log(dMi).vector
             err_position = err[:3]
             err_orientation = err[3:]
-            # print(np.linalg.norm(err_position), np.linalg.norm(err_orientation))
             if np.all(np.abs(err_position) < eps_position) and np.linalg.norm(err_orientation) < eps_orientation:
                 success = True
                 break
             if i >= IT_MAX:
                 success = False
                 break
+            # The jacobian is computed in the joint frame, because the error is in the joint frame
             pinocchio.computeJointJacobians(self.pinocchio_robot_model, self.pinocchio_robot_model_data, q)
             J = pinocchio.computeJointJacobian(
                 self.pinocchio_robot_model, self.pinocchio_robot_model_data, q,
