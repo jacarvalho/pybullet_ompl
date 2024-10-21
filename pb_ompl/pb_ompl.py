@@ -275,7 +275,6 @@ class PbOMPL():
         self.robot = robot
         self.robot_id = robot.id
         self.obstacles = obstacles
-        print(self.obstacles)
 
         self.space = PbStateSpace(robot.num_dim)
 
