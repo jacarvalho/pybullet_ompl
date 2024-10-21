@@ -163,6 +163,7 @@ class PbOMPLRobot:
             self, world_H_EEtarget, q_initial=None, debug=False,
             eps_position=0.005, eps_orientation = np.deg2rad(1.0),
             std_q_pos=0.,
+            IT_MAX=1000, DT=1e-2, damp=1e-12,
             **kwargs):
         # Gradient-based IK solver using pinochio
         assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
@@ -177,10 +178,6 @@ class PbOMPLRobot:
         else:
             q = q_initial + np.random.normal(0, std_q_pos, size=q_initial.shape)
         q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
-
-        IT_MAX = 1000
-        DT = 1e-2
-        damp = 1e-12
 
         np_eye_6 = np.eye(6)
 
@@ -322,9 +319,10 @@ class PbOMPL():
 
         # check self-collision
         for link1, link2 in self.check_link_pairs:
-            # max_distance=0: don't admit any self-collision
-            if utils.pairwise_link_collision(self.pybullet_client, self.robot_id, link1, self.robot_id, link2, max_distance=0.):
+            # max_distance >= 0: don't admit any self-collision
+            if utils.pairwise_link_collision(self.pybullet_client, self.robot_id, link1, self.robot_id, link2, max_distance=0.0):
                 # print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
+                print('self collision')
                 return False
 
         # check collision against environment
@@ -337,6 +335,7 @@ class PbOMPL():
                     max_distance=max_distance):
                 # print('body collision', body1, body2)
                 # print(get_body_name(body1), get_body_name(body2))
+                print('environment collision')
                 return False
         return True
 
@@ -631,6 +630,8 @@ class PbOMPL():
 
     def get_state_not_in_collision(
             self, ee_pose_target=None, max_tries=500, raise_error=True, debug=False,
+            q_idxs_assign_after_ik=None,
+            q_pos_assign_after_ik=None,
             verbose=False,
             **kwargs
     ):
@@ -645,13 +646,20 @@ class PbOMPL():
             if ee_pose_target is not None:
                 state = self.robot.run_ik(ee_pose_target, **kwargs)
                 if state is None:
+                    if verbose:
+                        print(f'Failed to solve IK for:\n{ee_pose_target}')
                     continue
+                if q_idxs_assign_after_ik is not None:
+                    for q_idx, q_pos in zip(q_idxs_assign_after_ik, q_pos_assign_after_ik):
+                        state[q_idx] = q_pos
             else:
                 state = self.robot.get_random_joint_position()
 
             if self.is_state_valid(state, check_bounds=True):
                 state_valid = state
                 break
+            if verbose:
+                print(f'IK successfull, but collision detected for state: {state}')
 
         if state_valid is not None:
             if debug:
