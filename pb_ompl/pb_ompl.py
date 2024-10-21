@@ -5,6 +5,7 @@ import matplotlib
 import numpy as np
 from matplotlib import cm, pyplot as plt
 from scipy.spatial.transform import Rotation
+from tqdm import tqdm
 
 np.set_printoptions(precision=3, suppress=True)
 import pinocchio
@@ -161,6 +162,7 @@ class PbOMPLRobot:
     def run_ik(
             self, world_H_EEtarget, q_initial=None, debug=False,
             eps_position=0.005, eps_orientation = np.deg2rad(1.0),
+            std_q_pos=0.,
             **kwargs):
         # Gradient-based IK solver using pinochio
         assert self.pinocchio_robot_model is not None, "Please specify urdf_path when constructing PbOMPLRobot"
@@ -173,8 +175,8 @@ class PbOMPLRobot:
         if q_initial is None:
             q = self.get_random_joint_position()
         else:
-            q = q_initial + np.random.normal(0, 0.5, size=q_initial.shape)
-            q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
+            q = q_initial + np.random.normal(0, std_q_pos, size=q_initial.shape)
+        q = np.clip(q, self.joint_bounds_low_np, self.joint_bounds_high_np)
 
         IT_MAX = 1000
         DT = 1e-2
@@ -448,6 +450,8 @@ class PbOMPL():
                 print(f'length after simplify+smooth: {len(sol_path_list)}')
 
             # interpolate
+            if interpolate_num is None:
+                interpolate_num = len(sol_path_geometric.getStates())
             sol_path_geometric.interpolate(interpolate_num)
             if debug:
                 sol_path_states = sol_path_geometric.getStates()
@@ -626,7 +630,11 @@ class PbOMPL():
 
             time.sleep(sleep_time)
 
-    def get_state_not_in_collision(self, ee_pose_target=None, max_tries=500, raise_error=True, debug=False, **kwargs):
+    def get_state_not_in_collision(
+            self, ee_pose_target=None, max_tries=500, raise_error=True, debug=False,
+            verbose=False,
+            **kwargs
+    ):
         """
         Get a state not in collision, with IK if ee_pose_target is not None
         """
@@ -634,7 +642,7 @@ class PbOMPL():
             print(f'\n---> Getting state not in collision...')
         state_valid = None
         state = None
-        for j in range(max_tries):
+        for j in tqdm(range(max_tries), disable=not verbose, total=max_tries, desc='IK tries', leave=False):
             if ee_pose_target is not None:
                 state = self.robot.run_ik(ee_pose_target, **kwargs)
                 if state is None:
@@ -702,17 +710,29 @@ def add_sphere(pybullet_client, sphere_pos, sphere_radius,
                orientation=(0, 0, 0, 1),  # orientation quaternion xyzw
                color=(220./255., 220./255., 220./255., 1.0)
                ):
-    col_id = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius)
-    visual_id = pybullet_client.createVisualShape(
-        pybullet_client.GEOM_SPHERE, radius=sphere_radius, rgbaColor=color
-    )
-    body_id = pybullet_client.createMultiBody(
-        baseMass=0,
-        baseCollisionShapeIndex=col_id,
-        baseVisualShapeIndex=visual_id,
-        basePosition=sphere_pos, baseOrientation=orientation
-    )
-    return body_id
+    if sphere_pos.ndim > 1:
+        assert np.all(np.asarray(sphere_radius) == sphere_radius[0]), "All spheres should have the same radius"
+        # https://github.com/bulletphysics/bullet3/blob/master/examples/pybullet/examples/createMultiBodyBatch.py
+        col_id = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius[0])
+        visual_id = pybullet_client.createVisualShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius[0], rgbaColor=color[0])
+        body_ids = p.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=col_id,
+            baseVisualShapeIndex=visual_id,
+            batchPositions=sphere_pos
+        )
+        return body_ids
+    else:
+        col_id = pybullet_client.createCollisionShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius)
+        visual_id = pybullet_client.createVisualShape(pybullet_client.GEOM_SPHERE, radius=sphere_radius, rgbaColor=color)
+
+        body_id = pybullet_client.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=col_id,
+            baseVisualShapeIndex=visual_id,
+            basePosition=sphere_pos, baseOrientation=orientation
+        )
+        return body_id
 
 
 def finite_difference_vector(x, dt=1., method='central'):
