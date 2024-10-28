@@ -306,12 +306,18 @@ class PbOMPL():
     def remove_obstacles(self, obstacle_id):
         self.obstacles.remove(obstacle_id)
 
-    def is_state_valid(self, state, max_distance=None, check_bounds=False):
+    def is_state_valid(self, state, max_distance=None, check_bounds=False, buffer=np.deg2rad(5.0)):
         # Satisfy bounds
         # Should be unecessary if joint bounds is properly set
         # Check for joint bounds due to the bspline interpolation
         if check_bounds:
-            if np.any(np.logical_or(state < self.robot.joint_bounds_np[:, 0], state > self.robot.joint_bounds_np[:, 1])):
+            if np.any(
+                    np.logical_or(
+                        # add a buffer to avoid being close to joint limits
+                        state[:7] < self.robot.joint_bounds_np[:7, 0] + buffer,
+                        state[:7] > self.robot.joint_bounds_np[:7, 1] - buffer
+                    )
+            ):
                 return False
 
         # set the robot internal state
@@ -320,9 +326,11 @@ class PbOMPL():
         # check self-collision
         for link1, link2 in self.check_link_pairs:
             # max_distance >= 0: don't admit any self-collision
-            if utils.pairwise_link_collision(self.pybullet_client, self.robot_id, link1, self.robot_id, link2, max_distance=0.0):
+            if utils.pairwise_link_collision(
+                    self.pybullet_client, self.robot_id, link1, self.robot_id, link2,
+                    max_distance=0.):
                 # print(get_body_name(body), get_link_name(body, link1), get_link_name(body, link2))
-                print('self collision')
+                # print('self collision')
                 return False
 
         # check collision against environment
@@ -335,7 +343,7 @@ class PbOMPL():
                     max_distance=max_distance):
                 # print('body collision', body1, body2)
                 # print(get_body_name(body1), get_body_name(body2))
-                print('environment collision')
+                # print('environment collision')
                 return False
         return True
 
