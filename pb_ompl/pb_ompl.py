@@ -445,7 +445,7 @@ class PbOMPL():
                 # Simplify the path
                 # https://ompl.kavrakilab.org/classompl_1_1geometric_1_1PathSimplifier.html
                 # https://ompl.kavrakilab.org/PathSimplifier_8cpp_source.html - lines 677
-                res_simplify = ps.simplify(sol_path_geometric, maxTime=1e-1)
+                res_simplify = ps.simplify(sol_path_geometric, maxTime=1.0)
                 if debug:
                     print(f"simplify path return: {res_simplify}")
 
