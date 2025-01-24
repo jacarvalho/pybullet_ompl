@@ -731,7 +731,7 @@ def finite_difference_vector(x, dt=1., method='central'):
 
 def create_bspline_knots(num_control_points, degree):
     """
-    Create the knots for a B-spline.
+    Create knots for a B-spline, between 0 and 1.
     # https://arxiv.org/pdf/2301.04330.pdf
     # Equally spaced knots.
     # These knots ensure that the first and last control points are the start and goal states
@@ -740,10 +740,6 @@ def create_bspline_knots(num_control_points, degree):
     c = num_control_points
     m = d + c
     knots = np.pad(np.linspace(0., 1., m + 1 - 2 * d), d, 'edge')
-    # OLD implementation (for reference)
-    # knots = np.zeros(d + 1)
-    # knots = np.append(knots, np.linspace(1 / (c - d), (c - d - 1) / (c - d), c - d - 1))
-    # knots = np.append(knots, np.ones(d + 1))
     return knots
 
 
@@ -773,18 +769,16 @@ def fit_bspline_to_path(
     print(f'coefficients shape: {cc.shape}') if debug else None
 
     if bspline_zero_vel_at_start_and_goal:
-        # The initial and final velocity should be zero
-        # Set the second and second-to-last control points to be the same
-        # as the first and last control points.
-        # assign the control points to the start and goal states - https://arxiv.org/pdf/2301.04330.pdf
+        # The initial and final velocity should be zero.
+        # Set the second and second-to-last control points to be the same as the first and last control points.
+        # Assign the control points to the start and goal states - https://arxiv.org/pdf/2301.04330.pdf
         cc[:, 0] = path[0].copy()
         cc[:, -1] = path[-1].copy()
         cc[:, 1] = cc[:, 0].copy()
         cc[:, -2] = cc[:, -1].copy()
     if bspline_zero_acc_at_start_and_goal:
-        # The initial and final acceleration should be zero
-        # Set the third and third-to-last control points to be the same
-        # as the first and last control points.
+        # The initial and final acceleration should be zero.
+        # Set the third and third-to-last control points to be the same as the first and last control points.
         cc[:, 2] = cc[:, 0].copy()
         cc[:, -3] = cc[:, -1].copy()
 
